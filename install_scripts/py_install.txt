@@ -1,0 +1,3 @@
+python package install script. (Direct copy paste into console)
+
+pip install nidaqmx
