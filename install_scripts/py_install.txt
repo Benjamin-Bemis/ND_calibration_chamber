@@ -1,3 +1,11 @@
-python package install script. (Direct copy paste into console)
+'''
+Python package install script. (Direct copy paste into console). 
+If the terminal throws any error then you will need to install each of the packages seperately. 
+Once all the packages are installed you will need to restart the python kernal. 
+This can be done by clicking on the triple line stack in the console window of Spyder and then clicking "restart kernal"
+'''
 
+pip install pyModbusTCP
+pip install pyfiglet
+pip install serial
 pip install nidaqmx
