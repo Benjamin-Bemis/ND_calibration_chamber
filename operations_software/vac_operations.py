@@ -55,8 +55,6 @@ To-do list
 -Allow non integer temp set points (will need to be a float to in tranistion) [te_functions_setoutput_ss_moniter]
     -elongate the settling time 
 
-- Manual Mode within psp_auto: Need to be able to set non integers in the first interation of pressure (This is at the beginning of the code when prompting the user) 
-
 -impliment camera control(Add to PLC program)
 
 -impliment laser control(Add to PLC program)
