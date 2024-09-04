@@ -164,7 +164,7 @@ for p in press_set_pts:
         if delay - time_elapse == laser_pretrig:
             # plc.ttl_pulse_on(laser,status = "on")
             print("Laser triggered. \n")
-            elif delay - time_elapse == camera_pretrig:
+        elif delay - time_elapse == camera_pretrig:
                 # plc.ttl_pulse(camera, status = "on")
                 print("Camera triggered. \n")
     
