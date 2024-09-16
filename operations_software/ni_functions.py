@@ -94,7 +94,7 @@ def triggertest (length):
 # Functional code for reading Omega Sensor
 
 def omega_read (device_name,omega_channel,trigger_channel,sample_rate,measure_duration):
-    test, time_vector = record(device_name,omega_channel,trigger_channel,sample_rate,measure_duration)
+    test, time_vector = record(device_name, omega_channel, trigger_channel, sample_rate,measure_duration)
     
     #Omega Pressure setup
     balence = 0.061                 #balenced at 0 bar

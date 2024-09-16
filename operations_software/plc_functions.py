@@ -3,35 +3,51 @@
 Created on Fri Nov  3 16:21:22 2023
 
 @author: Benjamin Bemis Ph.D Student
+99.87250764300121
+(p_range.min(), p_range.max())
 """
 from pyModbusTCP.client import ModbusClient
 import numpy as np
-p_range = np.linspace(0, 3500,num = 100000 )                                       #Regulator pressure range in kpa
-voltage_pt_range = np.interp(p_range, (p_range.min(), p_range.max()), (0, 100))
+
+def Psi2kPa(Psi):
+    '''
+    pressure conversion, Psi to kPa
+    
+    Proportion air tuned so 1.4100141001410016 V is 50kPa
+    Psi2kPa(upper_range + atmospherePressure)
+    '''
+    kPa = Psi*6.894757
+    return kPa
+
+atm = 100 # Psi
+upper_range = 500 #psig referenced from the data sheet
+
+#Regulator pressure range in kPa. Note: this is absolute pressure
+p_range = np.linspace(-1*Psi2kPa(upper_range)/20, 5.15*Psi2kPa(upper_range)/40, num = 100000)
+
+#voltage_pt_range = np.linspace(0, 10, num = 100000)
+voltage_pt_range = np.interp(p_range, (p_range.min(), p_range.max()), (0, 100)) 
 
 def find_closest_value_index(value, array):
     array = np.asarray(array)
     index = np.abs(array - value).argmin()
     return index
 
-def get_set_voltage(pressure):
+def get_set_voltage(pressure, ix):
     index = find_closest_value_index(pressure, p_range)
-    return voltage_pt_range[index]
-    
+    return voltage_pt_range[index+ix]
 
 
-def set_pressure(pressure):
+def set_pressure(voltage_percent):
     c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
-    voltage_percent = get_set_voltage(pressure)
-    # print(voltage_percent)
     # Open the Modbus connection
     if c.open():
         # Define the Modbus address to write to (400001)
         modbus_address = 0  # Note that Modbus addresses are 0-based, so 400001 becomes 1
     
         # Define the data to write (for example, a single integer value)
+        
         data_to_write = int(100*voltage_percent)
-    
         # Write the data to the specified Modbus address
         is_success = c.write_single_register(modbus_address, data_to_write)
     
@@ -56,7 +72,9 @@ def view_set_pressure():
     c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
     set_point = c.read_holding_registers(0)
     set_point = int(set_point[0])/100
+    print('set_point: ', set_point)
     set_pressure_index = find_closest_value_index(set_point, voltage_pt_range)
+    print('set_pressure_index: ',str(set_pressure_index))
     c.close()
     return (p_range[set_pressure_index])
 
