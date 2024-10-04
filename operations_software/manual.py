@@ -169,15 +169,15 @@ camera = 2          #Modbus register on the plc for the camera
 all_times_te = []
 all_temps_te = []
 
-all_times_omega = []
-all_pressure_omega = []
-all_pressure_mean_omega = []
-all_voltage_omega = []
-all_avg_temp = []
+all_times_omega_array = np.array([])
+all_pressure_omega_array = np.array([])
+all_pressure_mean_omega_array = np.array([])
+all_voltage_omega_array = np.array([])
+all_voltage_omega_mean_array = np.array([])
+all_avg_temp = np.array([])
 
-
-
-
+total_time = np.array([])
+new_time = 0
 
 
 print(f"Data for temperature setpoint: {temp} has been begun:")
@@ -186,7 +186,7 @@ print("\n")
 times,temps = te.set_output_ss_monitor(temp,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
 
 
-plc.set_pressure(press)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
+plc.run_PLC_Controller(press, device_name, omega_channel, trigger_channel, sample_rate, measure_duration)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
 current_setpoint = plc.view_set_pressure()                             # Read the set pressure from the plc 
 print(f"The pressure has been set to {current_setpoint} kPa.")
 print("="*50)
@@ -234,17 +234,6 @@ all_times_te.append(times)
 all_temps_te.append(temps)
 all_times_te_array = np.array(all_times_te)
 all_temps_te_array = np.array(all_temps_te)
-
-all_times_omega.append(time_vector)
-all_pressure_omega.append(pressure_kpa)
-all_pressure_mean_omega.append(pressure_kpa_mean)
-all_voltage_omega.append(raw_voltage)
-  
-
-all_times_omega_array = np.array(all_times_omega)
-all_pressure_omega_array = np.array(all_pressure_omega)
-all_pressure_mean_omega_array = np.array(all_pressure_mean_omega)
-all_voltage_omega_array = np.array(all_voltage_omega)
         
 print(f"Data for temperature setpoint: {temp} has been collected")
 print("="*50)

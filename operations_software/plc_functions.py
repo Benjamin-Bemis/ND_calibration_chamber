@@ -8,6 +8,8 @@ Created on Fri Nov  3 16:21:22 2023
 """
 from pyModbusTCP.client import ModbusClient
 import numpy as np
+import time
+import threading
 
 def Psi2kPa(Psi):
     '''
@@ -118,5 +120,81 @@ def ttl_pulse(register,status):
         print("="*50)
         print("\n")
         
+def runOsciloscope(measure_duration, laser):
+    ttl_pulse(laser, status = "on")
+    time.sleep(measure_duration)
+    ttl_pulse(laser, status = "off")
+        
+def run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, laser, camera):
+    ni.all_times_omega = []
+    ni.all_pressure_omega = []
+    ni.all_pressure_mean_omega = []
+    ni.all_voltage_omega = []
+    ni.all_voltage_omega_mean = []
+    # Thread Code
+    # ==============================================================================
+    thread1 = threading.Thread(target = ni.omega_read, args = (device_name, omega_channel, trigger_channel, sample_rate, measure_duration))
+    thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, laser))
+    
+    # =====================================================
+    start_time = time.time()
+    exit_loop = False
+    ix = 0
+    count = 0
+    voltage_percent = get_set_voltage(p, ix)
+    set_pressure(voltage_percent)
+    time.sleep(15) # 15
+    past_pressures = np.array([])
+    while not exit_loop:
+        thread1.start()
+        thread2.start()
+        
+        thread1.join()
+        thread2.join()
 
+        thread1 = threading.Thread(target = ni.omega_read, args = (device_name, omega_channel, trigger_channel, sample_rate, measure_duration))
+        thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, laser))
+
+        print('last reading: ', str(ni.pressure_kpa_mean))
+        if round(ni.pressure_kpa_mean, 1) == p:
+            exit_loop = True
+            print('pressure successfully set: ', str(ni.pressure_kpa_mean))
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            mins, secs = divmod(elapsed_time, 60)
+            print('time: ', str(mins), ' mins; ', str(int(secs)), ' seconds')
+        else:
+            Pcrit = 140
+            count = count + 1
+            
+            past_pressures = np.append(past_pressures, ni.pressure_kpa_mean)
+            if count > 1:
+                if round(past_pressures[-2],1) == round(ni.pressure_kpa_mean,1):
+                    count = 1
+                    Pcrit = Pcrit*2
+                last2Pressures = np.array([past_pressures[-2], past_pressures[-1]])
+                t = [1,2]
+                temp_vars = last2Pressures - p
+                slope, _ = np.polyfit(t, temp_vars, 1)
+                ix = ix + int(Pcrit*(p - ni.pressure_kpa_mean))
+            else:
+                ix = int(Pcrit*(p - ni.pressure_kpa_mean))
+            voltage_percent = get_set_voltage(p, ix)
+            print('hold on, reseting pressure to be closer to desired pressure of ', str(p))
+            set_pressure(voltage_percent)
+            time.sleep(15)
+        
+    ni.all_times_omega.append(ni.time_vector)
+    ni.all_pressure_omega.append(ni.pressure_kpa)
+    ni.all_pressure_mean_omega.append(ni.pressure_kpa_mean)
+    ni.all_voltage_omega.append(ni.raw_voltage)
+    
+    ni.all_voltage_omega_mean.append(np.mean(ni.raw_voltage))
+    
+    OmegaDic = {'all_times_omega_array' : np.array(ni.all_times_omega),
+    'all_pressure_omega_array' : np.array(ni.all_pressure_omega),
+    'all_pressure_mean_omega_array' : np.array(ni.all_pressure_mean_omega),
+    'all_voltage_omega_array' : np.array(ni.all_voltage_omega),
+    'all_voltage_omega_mean_array' : np.array(ni.all_voltage_omega_mean)}
      
+    return OmegaDic, elapsed_time

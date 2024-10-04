@@ -39,6 +39,7 @@ from scipy.io import savemat
 import time
 import plc_functions as plc
 import pyfiglet as figlet
+import matplotlib as plt
 
 ''' 
 Package install script
@@ -237,18 +238,19 @@ camera = 2          #Modbus register on the plc for the camera
 all_times_te = []
 all_temps_te = []
 
-all_times_omega = []
-all_pressure_omega = []
-all_pressure_mean_omega = []
-all_voltage_omega = []
-all_avg_temp = []
+all_times_omega_array = np.array([])
+all_pressure_omega_array = np.array([])
+all_pressure_mean_omega_array = np.array([])
+all_voltage_omega_array = np.array([])
+all_voltage_omega_mean_array = np.array([])
+all_avg_temp = np.array([])
+
+total_time = np.array([])
+new_time = 0
 # =====================================================
 
 delay = 10                                                                      # Delay time in seconds
 pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
-
-
-
 
 # =====================================================
 # Bulk Operation
@@ -259,12 +261,24 @@ for T in temp_set_pts:
     times,temps = te.set_output_ss_monitor(T,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
     
     for p in press_set_pts:
-        plc.set_pressure(p)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
-        current_setpoint = plc.view_set_pressure()                             # Read the set pressure from the plc 
-        print(f"The pressure has been set to {current_setpoint} kPa.")
-        print("="*50)
-        print("\n")
-        time.sleep(15)
+        OmegaDic, elapsed_time = plc.run_PLC_Controller(p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
+        new_time = new_time + elapsed_time/60
+        total_time = np.append(total_time, new_time)
+        
+        all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
+        all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
+        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
+        all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
+        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
+        
+        f = plt.figure(1)
+        f.clear()
+        oscillations = round(np.max(OmegaDic['all_pressure_omega_array'])-np.min(OmegaDic['all_pressure_omega_array']),4)
+        plt.plot(all_times_omega_array, all_pressure_omega_array)
+        plt.xlabel('time, mins')
+        string = 'pressure| range: '+ str(oscillations)
+        plt.ylabel(string)
+        plt.title('time vs pressure')
 
         #=============================================================================
         #       Completed block for automated camera and laser triggering
@@ -309,22 +323,21 @@ for T in temp_set_pts:
         all_temps_te.append(temps)
         all_times_te_array = np.array(all_times_te)
         all_temps_te_array = np.array(all_temps_te)
-        
-        all_times_omega.append(time_vector)
-        all_pressure_omega.append(pressure_kpa)
-        all_pressure_mean_omega.append(pressure_kpa_mean)
-        all_voltage_omega.append(raw_voltage)
           
-        
-        all_times_omega_array = np.array(all_times_omega)
-        all_pressure_omega_array = np.array(all_pressure_omega)
-        all_pressure_mean_omega_array = np.array(all_pressure_mean_omega)
-        all_voltage_omega_array = np.array(all_voltage_omega)
             
     print(f"Data for temperature setpoint: {T} has been collected")
     print("="*50)
     print("\n")
     time.sleep(15)
+    
+g = plt.figure(2)
+g.clear()
+plt.plot(total_time, press_set_pts)
+plt.xlabel('time, minutes')
+plt.ylabel('set pressure, kPa')
+plt.title('system accuracy for pressure readings')
+error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
+plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
         
 te.output_enable("off")                                                        # Turns the TE off
 print("The TE has been shutoff.")
