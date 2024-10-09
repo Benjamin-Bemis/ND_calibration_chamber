@@ -108,7 +108,7 @@ device_name = ni.local_sys()
 # plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
 laser = 1           #Modbus register on the plc for the laser was 2
 camera = 2          #Modbus register on the plc for the camera was 1
-
+register = laser
 # ==============================================================================
 
 # =====================================================
@@ -126,7 +126,7 @@ delay = 10                                                                      
 pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
 
 for p in press_set_pts:
-    OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, laser, camera)
+    OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
     new_time = new_time + elapsed_time/60
     total_time = np.append(total_time, new_time)
     

@@ -120,12 +120,12 @@ def ttl_pulse(register,status):
         print("="*50)
         print("\n")
         
-def runOsciloscope(measure_duration, laser):
-    ttl_pulse(laser, status = "on")
+def runOsciloscope(measure_duration, register):
+    ttl_pulse(register, status = "on")
     time.sleep(measure_duration)
-    ttl_pulse(laser, status = "off")
+    ttl_pulse(register, status = "off")
         
-def run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, laser, camera):
+def run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register):
     ni.all_times_omega = []
     ni.all_pressure_omega = []
     ni.all_pressure_mean_omega = []
@@ -134,7 +134,7 @@ def run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sampl
     # Thread Code
     # ==============================================================================
     thread1 = threading.Thread(target = ni.omega_read, args = (device_name, omega_channel, trigger_channel, sample_rate, measure_duration))
-    thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, laser))
+    thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, register))
     
     # =====================================================
     start_time = time.time()
@@ -146,30 +146,33 @@ def run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sampl
     time.sleep(15) # 15
     past_pressures = np.array([])
     while not exit_loop:
-        thread1.start()
-        thread2.start()
+        [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage] = ni.omega_read(device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
         
-        thread1.join()
-        thread2.join()
-
-        thread1 = threading.Thread(target = ni.omega_read, args = (device_name, omega_channel, trigger_channel, sample_rate, measure_duration))
-        thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, laser))
-
         print('last reading: ', str(ni.pressure_kpa_mean))
-        if round(ni.pressure_kpa_mean, 1) == p:
+        if round(ni.pressure_kpa_mean) == p:
             exit_loop = True
             print('pressure successfully set: ', str(ni.pressure_kpa_mean))
             end_time = time.time()
             elapsed_time = end_time - start_time
             mins, secs = divmod(elapsed_time, 60)
             print('time: ', str(mins), ' mins; ', str(int(secs)), ' seconds')
+            
+            thread1.start()
+            thread2.start()
+            
+            thread1.join()
+            thread2.join()
+
+            thread1 = threading.Thread(target = ni.omega_read, args = (device_name, omega_channel, trigger_channel, sample_rate, measure_duration))
+            thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, register))
+            
         else:
             Pcrit = 140
             count = count + 1
             
             past_pressures = np.append(past_pressures, ni.pressure_kpa_mean)
             if count > 1:
-                if round(past_pressures[-2],1) == round(ni.pressure_kpa_mean,1):
+                if round(past_pressures[-2]) == round(ni.pressure_kpa_mean):
                     count = 1
                     Pcrit = Pcrit*2
                 last2Pressures = np.array([past_pressures[-2], past_pressures[-1]])

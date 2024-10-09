@@ -147,12 +147,20 @@ while True:
     except ValueError:
         # temp = te.set_temp(float(te.therm_read()))
         print("Nothing entered. Exiting Script \n")
-
+      
 # Pressure in kpa
 while True:
     try:
-        init_press_choice = input("How would you like your pressure profile to be generated? Linspace or Manual: \n")
+        init_press_choice = input("How would you like your pressure profile to be generated? Linspace, Manual, or Vector: \n")
         match init_press_choice:
+            case"Vector":
+                low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
+                high_press = int(input("Input the highest pressure in kPa: \n"))
+                interval = int(input("Input the interval or step: \n"))
+                
+                
+                press_set_pts = np.arange(low_press, high_press+interval, step=interval) # this is the vector of the pressure set points of the regulator
+                print(f"The pressure range to be used is {press_set_pts} \n")
             case "Linspace":
                 low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
                 high_press = int(input("Input the highest pressure in kPa: \n"))
@@ -174,17 +182,9 @@ while True:
                                  
             case _:
                 print("You have imput an invalid profile.")
-                    
         break
     except ValueError:
-        # press = te.set_temp(float(te.therm_read()))
         print("Nothing entered. Exiting Script \n")
-      
- 
-  
-    
-  
-    
   
 # Initializes the directory for saving the data
 if not os.path.exists(savepath):
@@ -212,7 +212,7 @@ device_name = ni.local_sys()
 # plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
 laser = 1           #Modbus register on the plc for the laser
 camera = 2          #Modbus register on the plc for the camera
-
+register = laser
 # ==============================================================================
 
 
@@ -261,7 +261,7 @@ for T in temp_set_pts:
     times,temps = te.set_output_ss_monitor(T,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
     
     for p in press_set_pts:
-        OmegaDic, elapsed_time = plc.run_PLC_Controller(p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
+        OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
         new_time = new_time + elapsed_time/60
         total_time = np.append(total_time, new_time)
         

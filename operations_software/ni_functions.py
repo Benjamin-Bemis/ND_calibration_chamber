@@ -122,6 +122,8 @@ class ni:
         ni.pressure_kpa = pressure_kpa
         ni.pressure_kpa_mean = pressure_kpa_mean
         ni.raw_voltage = raw_voltage
+        
+        return [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage]
     
         # ploting the results
         # plt.plot(time_vector,test)

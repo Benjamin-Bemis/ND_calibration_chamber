@@ -150,7 +150,7 @@ device_name = ni.local_sys()
 # plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
 laser = 1           #Modbus register on the plc for the laser
 camera = 2          #Modbus register on the plc for the camera
-
+register = laser
 
 # Establish connection to the TE Controller 
 
@@ -186,7 +186,7 @@ print("\n")
 times,temps = te.set_output_ss_monitor(temp,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
 
 
-plc.run_PLC_Controller(press, device_name, omega_channel, trigger_channel, sample_rate, measure_duration)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
+plc.run_PLC_Controller(press, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
 current_setpoint = plc.view_set_pressure()                             # Read the set pressure from the plc 
 print(f"The pressure has been set to {current_setpoint} kPa.")
 print("="*50)
