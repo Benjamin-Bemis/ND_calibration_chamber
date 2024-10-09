@@ -172,7 +172,7 @@ def run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sampl
             
             past_pressures = np.append(past_pressures, ni.pressure_kpa_mean)
             if count > 1:
-                if round(past_pressures[-2]) == round(ni.pressure_kpa_mean):
+                if round(past_pressures[-2], 1) == round(ni.pressure_kpa_mean, 1):
                     count = 1
                     Pcrit = Pcrit*2
                 last2Pressures = np.array([past_pressures[-2], past_pressures[-1]])

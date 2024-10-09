@@ -59,7 +59,7 @@ while True:
                 interval = int(input("Input the interval or step: \n"))
                 
                 
-                press_set_pts = np.arange(low_press, high_press+interval, step=interval) # this is the vector of the pressure set points of the regulator
+                press_set_pts = np.arange(low_press, high_press+1, step=interval) # this is the vector of the pressure set points of the regulator
                 print(f"The pressure range to be used is {press_set_pts} \n")
             case "Linspace":
                 low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
@@ -125,16 +125,25 @@ new_time = 0
 delay = 10                                                                      # Delay time in seconds
 pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
 
+counter_boolean = True
 for p in press_set_pts:
     OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
     new_time = new_time + elapsed_time/60
     total_time = np.append(total_time, new_time)
     
-    all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
-    all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
-    all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
-    all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
-    all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
+    if counter_boolean:
+        all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
+        all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
+        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
+        all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
+        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
+        counter_boolean = False
+    else:
+        all_times_omega_array = np.vstack((all_times_omega_array, OmegaDic['all_times_omega_array']))
+        all_pressure_omega_array = np.vstack((all_pressure_omega_array, OmegaDic['all_pressure_omega_array']))
+        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
+        all_voltage_omega_array = np.vstack((all_voltage_omega_array, OmegaDic['all_voltage_omega_array']))
+        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
     
     f = plt.figure(1)
     f.clear()
@@ -153,6 +162,19 @@ plt.ylabel('set pressure, kPa')
 plt.title('system accuracy for pressure readings')
 error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
 plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
+
+# Saving the various arrays from the data collection as .mat files
+savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,
+                                              "pressure_kpa_mean":all_pressure_mean_omega_array,
+                                              "time": all_times_omega_array,
+                                              "voltage_raw":all_voltage_omega_array,
+                                              "p_setpoints": press_set_pts,
+                                              "voltage_raw_mean" : all_voltage_omega_mean_array
+                                              })
+print("="*50)
+print(f"Data has been saved to this directory: {savepath}")
+print("="*50)
+print("\n")
 
 # #=============================================================================
 # #       Completed block for automated camera and laser triggering
@@ -175,10 +197,3 @@ plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
 #     # plc.ttl_pulse(laser, status = "off")
 #     # plc.ttl_pulse(camera, status = "off")
 #     #==============================================================================
-    
-# # Saving the various arrays from the data collection as .mat files
-# savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,"pressure_kpa_mean":all_pressure_mean_omega_array,"time": all_times_omega_array,"voltage_raw":all_voltage_omega_array,"p_setpoints": press_set_pts})
-# print("="*50)
-# print(f"Data has been saved to this directory: {savepath}")
-# print("="*50)
-# print("\n")
