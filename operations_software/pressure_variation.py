@@ -125,19 +125,31 @@ new_time = 0
 delay = 10                                                                      # Delay time in seconds
 pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
 
-counter_boolean = True
+boolean = True
+
+# Kulite Balancing
+mid_range_pressure = (press_set_pts[-1] - press_set_pts[0])/2 + press_set_pts[0]
+OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, mid_range_pressure, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
+
+while True:
+    try:
+        move_on = float(input("press enter after kulite is balanced and ready \n"))
+    except ValueError:
+        print('moving on: \n')
+        break
+
 for p in press_set_pts:
     OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
     new_time = new_time + elapsed_time/60
     total_time = np.append(total_time, new_time)
     
-    if counter_boolean:
+    if boolean:
         all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
         all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
         all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
         all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
         all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
-        counter_boolean = False
+        boolean = False
     else:
         all_times_omega_array = np.vstack((all_times_omega_array, OmegaDic['all_times_omega_array']))
         all_pressure_omega_array = np.vstack((all_pressure_omega_array, OmegaDic['all_pressure_omega_array']))
@@ -153,15 +165,16 @@ for p in press_set_pts:
     string = 'pressure| range: '+ str(oscillations)
     plt.ylabel(string)
     plt.title('time vs pressure')
-    
-g = plt.figure(2)
-g.clear()
-plt.plot(total_time, press_set_pts)
-plt.xlabel('time, minutes')
-plt.ylabel('set pressure, kPa')
-plt.title('system accuracy for pressure readings')
-error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
-plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
+
+if len(press_set_pts) > 1:    
+    g = plt.figure(2)
+    g.clear()
+    plt.plot(total_time, press_set_pts)
+    plt.xlabel('time, minutes')
+    plt.ylabel('set pressure, kPa')
+    plt.title('system accuracy for pressure readings')
+    error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
+    plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
 
 # Saving the various arrays from the data collection as .mat files
 savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,

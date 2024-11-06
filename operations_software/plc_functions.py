@@ -149,7 +149,7 @@ def run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sampl
         [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage] = ni.omega_read(device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
         
         print('last reading: ', str(ni.pressure_kpa_mean))
-        if round(ni.pressure_kpa_mean) == p:
+        if round(ni.pressure_kpa_mean) == round(p):
             exit_loop = True
             print('pressure successfully set: ', str(ni.pressure_kpa_mean))
             end_time = time.time()

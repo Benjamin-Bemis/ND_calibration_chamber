@@ -159,7 +159,7 @@ while True:
                 interval = int(input("Input the interval or step: \n"))
                 
                 
-                press_set_pts = np.arange(low_press, high_press+interval, step=interval) # this is the vector of the pressure set points of the regulator
+                press_set_pts = np.arange(low_press, high_press+1, step=interval) # this is the vector of the pressure set points of the regulator
                 print(f"The pressure range to be used is {press_set_pts} \n")
             case "Linspace":
                 low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
@@ -247,6 +247,7 @@ all_avg_temp = np.array([])
 
 total_time = np.array([])
 new_time = 0
+boolean = True
 # =====================================================
 
 delay = 10                                                                      # Delay time in seconds
@@ -265,12 +266,20 @@ for T in temp_set_pts:
         new_time = new_time + elapsed_time/60
         total_time = np.append(total_time, new_time)
         
-        all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
-        all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
-        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
-        all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
-        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
-        
+        if boolean:
+            all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
+            all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
+            all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
+            all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
+            all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
+            boolean = False
+        else:
+            all_times_omega_array = np.vstack((all_times_omega_array, OmegaDic['all_times_omega_array']))
+            all_pressure_omega_array = np.vstack((all_pressure_omega_array, OmegaDic['all_pressure_omega_array']))
+            all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
+            all_voltage_omega_array = np.vstack((all_voltage_omega_array, OmegaDic['all_voltage_omega_array']))
+            all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
+            
         f = plt.figure(1)
         f.clear()
         oscillations = round(np.max(OmegaDic['all_pressure_omega_array'])-np.min(OmegaDic['all_pressure_omega_array']),4)
@@ -330,14 +339,15 @@ for T in temp_set_pts:
     print("\n")
     time.sleep(15)
     
-g = plt.figure(2)
-g.clear()
-plt.plot(total_time, press_set_pts)
-plt.xlabel('time, minutes')
-plt.ylabel('set pressure, kPa')
-plt.title('system accuracy for pressure readings')
-error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
-plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
+if len(press_set_pts) > 1:    
+    g = plt.figure(2)
+    g.clear()
+    plt.plot(total_time, press_set_pts)
+    plt.xlabel('time, minutes')
+    plt.ylabel('set pressure, kPa')
+    plt.title('system accuracy for pressure readings')
+    error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
+    plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
         
 te.output_enable("off")                                                        # Turns the TE off
 print("The TE has been shutoff.")
