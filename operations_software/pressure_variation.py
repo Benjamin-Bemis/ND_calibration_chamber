@@ -25,36 +25,24 @@ To Do:
 
 import numpy as np
 import os
-import ni_functions as ni
+from ni_functions import ni
 from scipy.io import savemat
-import time
 import plc_functions as plc
 import pyfiglet as figlet
+import matplotlib.pyplot as plt
 
-#==============================================================================    
-# User defined values: Parsed from the main script
-
+# Timing Variables
+laser_pretrig = 3              # Pretrigger time in seconds
+camera_pretrig = 2             # Pretrigger time in seconds
+delay = 10                     # Delay time in seconds before collection
+measure_duration = 2         # Pressure measurement duration in seconds; was 2
+sample_rate = int(1e3)         # Sampling rate for omega sensor in hz
 
 # File Export Path
-from argparse import ArgumentParser
+folderPath = os.path.dirname(__file__)
+chamberPath = os.path.dirname(folderPath)
+savepath = os.path.join(chamberPath, 'LabTesting')
 
-parser = ArgumentParser()
-print(parser)
-parser.add_argument("savepath",type=str)
-parser.add_argument("laser_pretrig", type=str)
-parser.add_argument("camera_pretrig", type=str)
-parser.add_argument("delay", type=str)
-parser.add_argument("measure_duration", type=str)
-parser.add_argument("sample_rate", type=str)
-args = parser.parse_args()
-savepath = args.savepath
-laser_pretrig = int(args.laser_pretrig)
-camera_pretrig = int(args.camera_pretrig)
-delay = int(args.delay)
-measure_duration = int(args.measure_duration)
-sample_rate = int(args.sample_rate)
-
-#============================================================================== 
 print(figlet.figlet_format("MoBVaC"))                                          # ASCII print out of the chamber name
 print(50*"=")
 print(figlet.figlet_format("PSP Auto"))     
@@ -63,8 +51,16 @@ print(figlet.figlet_format("PSP Auto"))
 # Pressure in kpa
 while True:
     try:
-        init_press_choice = input("How would you like your pressure profile to be generated? Linspace or Manual: \n")
+        init_press_choice = input("How would you like your pressure profile to be generated? Linspace, Manual, or Vector: \n")
         match init_press_choice:
+            case"Vector":
+                low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
+                high_press = int(input("Input the highest pressure in kPa: \n"))
+                interval = int(input("Input the interval or step: \n"))
+                
+                
+                press_set_pts = np.arange(low_press, high_press+1, step=interval) # this is the vector of the pressure set points of the regulator
+                print(f"The pressure range to be used is {press_set_pts} \n")
             case "Linspace":
                 low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
                 high_press = int(input("Input the highest pressure in kPa: \n"))
@@ -101,93 +97,116 @@ else:
     print("=" * 50)
     print("\n")
         
-    # ==============================================================================  
-        
-    # General setup
-    # DAQ setup
-    trigger_channel = "port1/line0"
-    omega_channel = "ai0"
-    device_name = ni.local_sys()
-    # ==============================================================================
-    # plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
-    laser = 2           #Modbus register on the plc for the laser
-    camera = 1          #Modbus register on the plc for the camera
-
-    # ==============================================================================
-
-
-
-
-    # ========================================================
-    # Used for testing the DAQ and omega sensor 
-
-    # time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage = ni.omega_read(device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
-    # print("="*50)
-    # print(pressure_kpa_mean)
-    # print("="*50)
-    # print("\n")
-
-    # =====================================================
+# ==============================================================================  
     
-    # =====================================================
-    # Initializing the save variables
-    all_times_omega = []
-    all_pressure_omega = []
-    all_pressure_mean_omega = []
-    all_voltage_omega = []
-    # =====================================================
+# General setup
+# DAQ setup
+trigger_channel = "port1/line0"
+omega_channel = "ai0"
+device_name = ni.local_sys()
+# ==============================================================================
+# plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
+laser = 1           #Modbus register on the plc for the laser was 2
+camera = 2          #Modbus register on the plc for the camera was 1
+register = laser
+# ==============================================================================
 
-    delay = 10                                                                      # Delay time in seconds
-    pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
-    
-    # =====================================================
-    # Bulk Operation
+# =====================================================
+# Initializing the save variables
+all_times_omega_array = np.array([])
+all_pressure_omega_array =  np.array([])
+all_pressure_mean_omega_array =  np.array([])
+all_voltage_omega_array =  np.array([])
+all_voltage_omega_mean_array = np.array([])
+total_time = np.array([])
+new_time = 0
+# =====================================================
+
+delay = 10                                                                      # Delay time in seconds
+pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
+
+boolean = True
+
+# Kulite Balancing
+mid_range_pressure = (press_set_pts[-1] - press_set_pts[0])/2 + press_set_pts[0]
+OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, mid_range_pressure, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
+
+while True:
+    try:
+        move_on = float(input("press enter after kulite is balanced and ready \n"))
+    except ValueError:
+        print('moving on: \n')
+        break
+
 for p in press_set_pts:
-    plc.set_pressure(p)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
-    current_setpoint = plc.view_set_pressure()                             # Read the set pressure from the plc 
-    print(f"The pressure has been set to {current_setpoint} kPa.")
-    print("="*50)
-    print("\n")
-    time.sleep(15)
+    OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
+    new_time = new_time + elapsed_time/60
+    total_time = np.append(total_time, new_time)
+    
+    if boolean:
+        all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
+        all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
+        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
+        all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
+        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
+        boolean = False
+    else:
+        all_times_omega_array = np.vstack((all_times_omega_array, OmegaDic['all_times_omega_array']))
+        all_pressure_omega_array = np.vstack((all_pressure_omega_array, OmegaDic['all_pressure_omega_array']))
+        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
+        all_voltage_omega_array = np.vstack((all_voltage_omega_array, OmegaDic['all_voltage_omega_array']))
+        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
+    
+    f = plt.figure(1)
+    f.clear()
+    oscillations = round(np.max(OmegaDic['all_pressure_omega_array'])-np.min(OmegaDic['all_pressure_omega_array']),4)
+    plt.plot(all_times_omega_array, all_pressure_omega_array)
+    plt.xlabel('time, mins')
+    string = 'pressure| range: '+ str(oscillations)
+    plt.ylabel(string)
+    plt.title('time vs pressure')
 
-    #=============================================================================
-    #       Completed block for automated camera and laser triggering
-    
-    time_elapse = 0
-    # print("Turn on the Laser! and prep the camera")
-    start = time.time()
-    while time_elapse < delay:
-        print(f"You have {(delay)-time_elapse} seconds till collection begins")
-        print(50*"=")
-        time.sleep(1)
-        time_elapse = int(time.time()-start)
-        if delay - time_elapse == laser_pretrig:
-            # plc.ttl_pulse_on(laser,status = "on")
-            print("Laser triggered. \n")
-            elif delay - time_elapse == camera_pretrig:
-                # plc.ttl_pulse(camera, status = "on")
-                print("Camera triggered. \n")
-    
-        # Turning off the camera and the laser
-        # plc.ttl_pulse(laser, status = "off")
-        # plc.ttl_pulse(camera, status = "off")
-        #==============================================================================
-            
-        all_times_omega.append(time_vector)
-        all_pressure_omega.append(pressure_kpa)
-        all_pressure_mean_omega.append(pressure_kpa_mean)
-        all_voltage_omega.append(raw_voltage)
-        
-        all_times_omega_array = np.array(all_times_omega)
-        all_pressure_omega_array = np.array(all_pressure_omega)
-        all_pressure_mean_omega_array = np.array(all_pressure_mean_omega)
-        all_voltage_omega_array = np.array(all_voltage_omega)
-            
+if len(press_set_pts) > 1:    
+    g = plt.figure(2)
+    g.clear()
+    plt.plot(total_time, press_set_pts)
+    plt.xlabel('time, minutes')
+    plt.ylabel('set pressure, kPa')
+    plt.title('system accuracy for pressure readings')
+    error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
+    plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
+
 # Saving the various arrays from the data collection as .mat files
-savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,"pressure_kpa_mean":all_pressure_mean_omega_array,"time": all_times_omega_array,"voltage_raw":all_voltage_omega_array,"p_setpoints": press_set_pts})
+savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,
+                                              "pressure_kpa_mean":all_pressure_mean_omega_array,
+                                              "time": all_times_omega_array,
+                                              "voltage_raw":all_voltage_omega_array,
+                                              "p_setpoints": press_set_pts,
+                                              "voltage_raw_mean" : all_voltage_omega_mean_array
+                                              })
 print("="*50)
 print(f"Data has been saved to this directory: {savepath}")
 print("="*50)
 print("\n")
 
-# main()
+# #=============================================================================
+# #       Completed block for automated camera and laser triggering
+# time_elapse = 0
+# # print("Turn on the Laser! and prep the camera")
+# start = time.time()
+# while time_elapse < delay:
+#     print(f"You have {(delay)-time_elapse} seconds till collection begins")
+#     print(50*"=")
+#     time.sleep(1)
+#     time_elapse = int(time.time()-start)
+#     if delay - time_elapse == laser_pretrig:
+#         # plc.ttl_pulse_on(laser,status = "on")
+#         print("Laser triggered. \n")
+#     elif delay - time_elapse == camera_pretrig:
+#             # plc.ttl_pulse(camera, status = "on")
+#             print("Camera triggered. \n")
+
+#     # Turning off the camera and the laser
+#     # plc.ttl_pulse(laser, status = "off")
+#     # plc.ttl_pulse(camera, status = "off")
+#     #==============================================================================

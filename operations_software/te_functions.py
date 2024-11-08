@@ -26,7 +26,7 @@ import time
 import numpy as np
 
 def decthex(decimal_number):
-    hexadecimal_representation = hex(int(decimal_number*100))[2:]
+    hexadecimal_representation = hex(decimal_number*100)[2:]
     hexadecimal_representation = hexadecimal_representation.rjust(4, '0')  # Add leading zeros
     char_list = []
     
@@ -179,7 +179,7 @@ def output_enable(setting):
 
 def set_output_ss_monitor(setpoint,interval,ss_length):
     # pid_selector(int(setpoint))
-    set_temp(float(setpoint))
+    set_temp(int(setpoint))
     current_temp = therm_read()
     diff = np.abs(setpoint - current_temp)
     # diff = 1

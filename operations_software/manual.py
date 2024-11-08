@@ -49,23 +49,23 @@ pip install pyfiglet
 
 
 # File Export Path
-# from argparse import ArgumentParser
+from argparse import ArgumentParser
 
-# parser = ArgumentParser()
-# print(parser)
-# parser.add_argument("savepath",type=str)
-# parser.add_argument("laser_pretrig", type=str)
-# parser.add_argument("camera_pretrig", type=str)
-# parser.add_argument("delay", type=str)
-# parser.add_argument("measure_duration", type=str)
-# parser.add_argument("sample_rate", type=str)
-# args = parser.parse_args()
-# savepath = args.savepath
-# laser_pretrig = int(args.laser_pretrig)
-# camera_pretrig = int(args.camera_pretrig)
-# delay = int(args.delay)
-# measure_duration = int(args.measure_duration)
-# sample_rate = int(args.sample_rate)
+parser = ArgumentParser()
+print(parser)
+parser.add_argument("savepath",type=str)
+parser.add_argument("laser_pretrig", type=str)
+parser.add_argument("camera_pretrig", type=str)
+parser.add_argument("delay", type=str)
+parser.add_argument("measure_duration", type=str)
+parser.add_argument("sample_rate", type=str)
+args = parser.parse_args()
+savepath = args.savepath
+laser_pretrig = int(args.laser_pretrig)
+camera_pretrig = int(args.camera_pretrig)
+delay = int(args.delay)
+measure_duration = int(args.measure_duration)
+sample_rate = int(args.sample_rate)
 
 #============================================================================== 
 # #==============================================================================    
@@ -90,26 +90,6 @@ pip install pyfiglet
 # #============================================================================== 
 
 
-#==============================================================================    
-# User defined values: These will be implimented into the GUI eventually
-
-
-# File Export Path
-test_series = "Testing/"                               # Make sure to update this line with the name of the tests. Ex. "11_17_23_intensity_tests"
-samples_loaded = "none/"                                                        # Names of the samples loaded into the calibration chamber
-data_folder = "Matlab_exports/"                                                # This is the folder generated to house all the export folders
-base_folder = "C:/Users/17409/OneDrive/Documents/Calibration Chamber Data/"
-savepath = os.path.join(base_folder, (data_folder + test_series + samples_loaded))
-
-
-# Timing Variables
-laser_pretrig = 3              # Pretrigger time in seconds
-camera_pretrig = 2             # Pretrigger time in seconds
-delay = 10                     # Delay time in seconds before collection
-measure_duration = 2           # Pressure measurement duration in seconds
-sample_rate = int(1e3)         # Sampling rate for omega sensor in hz
-
-#==============================================================================
 
 
 
@@ -143,8 +123,7 @@ while True:
         temp = float(input("Enter the desired temperature (C) or hit the enter key for current temperature: "))
         break
     except ValueError:
-        temp = float(te.therm_read())
-        break
+        temp = te.set_temp(float(te.therm_read()))
     print(f"The set temperature is {temp} C.\n")
 
 # Pressure in kpa
@@ -154,7 +133,6 @@ while True:
         break
     except ValueError:
         press = float(100) # 1 bar or 100 kpa (Atmospheric Pressure)
-        break
     print(f"The set pressure is {press} kPa. \n")
     
     
@@ -172,7 +150,7 @@ device_name = ni.local_sys()
 # plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
 laser = 1           #Modbus register on the plc for the laser
 camera = 2          #Modbus register on the plc for the camera
-
+register = laser
 
 # Establish connection to the TE Controller 
 
@@ -191,15 +169,15 @@ camera = 2          #Modbus register on the plc for the camera
 all_times_te = []
 all_temps_te = []
 
-all_times_omega = []
-all_pressure_omega = []
-all_pressure_mean_omega = []
-all_voltage_omega = []
-all_avg_temp = []
+all_times_omega_array = np.array([])
+all_pressure_omega_array = np.array([])
+all_pressure_mean_omega_array = np.array([])
+all_voltage_omega_array = np.array([])
+all_voltage_omega_mean_array = np.array([])
+all_avg_temp = np.array([])
 
-
-
-
+total_time = np.array([])
+new_time = 0
 
 
 print(f"Data for temperature setpoint: {temp} has been begun:")
@@ -208,7 +186,7 @@ print("\n")
 times,temps = te.set_output_ss_monitor(temp,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
 
 
-plc.set_pressure(press)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
+plc.run_PLC_Controller(press, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)                                                    # This is the function that calls the plc to change the pressure from (0-1 Bar)
 current_setpoint = plc.view_set_pressure()                             # Read the set pressure from the plc 
 print(f"The pressure has been set to {current_setpoint} kPa.")
 print("="*50)
@@ -256,17 +234,6 @@ all_times_te.append(times)
 all_temps_te.append(temps)
 all_times_te_array = np.array(all_times_te)
 all_temps_te_array = np.array(all_temps_te)
-
-all_times_omega.append(time_vector)
-all_pressure_omega.append(pressure_kpa)
-all_pressure_mean_omega.append(pressure_kpa_mean)
-all_voltage_omega.append(raw_voltage)
-  
-
-all_times_omega_array = np.array(all_times_omega)
-all_pressure_omega_array = np.array(all_pressure_omega)
-all_pressure_mean_omega_array = np.array(all_pressure_mean_omega)
-all_voltage_omega_array = np.array(all_voltage_omega)
         
 print(f"Data for temperature setpoint: {temp} has been collected")
 print("="*50)
