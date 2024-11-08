@@ -55,6 +55,8 @@ To-do list
 -Allow non integer temp set points (will need to be a float to in tranistion) [te_functions_setoutput_ss_moniter]
     -elongate the settling time 
 
+- Manual Mode within psp_auto: Need to be able to set non integers in the first interation of pressure (This is at the beginning of the code when prompting the user) 
+
 -impliment camera control(Add to PLC program)
 
 -impliment laser control(Add to PLC program)
@@ -73,7 +75,7 @@ print("="*50)
 
 while True:
     try:
-        operation = input("What operation mode would you like to run? PSP/TSP Auto, PSP/TSP Int,MANUAL: \n")
+        operation = input("What operation mode would you like to run? PSP/TSP Auto, PSP/TSP Int, MANUAL, pressure_variation: \n")
         break
     except ValueError:
         print("Invalid operation.\n")   
@@ -86,6 +88,8 @@ match operation:
         subprocess.run(["python","psp_int.py",savepath,str(laser_pretrig),str(camera_pretrig),str(delay),str(measure_duration),str(sample_rate)])
     case "MANUAL":
         subprocess.run(["python","manual.py",savepath,str(laser_pretrig),str(camera_pretrig),str(delay),str(measure_duration),str(sample_rate)])
+    case "pressure_variation":
+        subprocess.run(["python","pressure_variation.py",savepath,str(laser_pretrig),str(camera_pretrig),str(delay),str(measure_duration),str(sample_rate)])
     case _:
         print("Invalid operation. \n")
 end = time.time()

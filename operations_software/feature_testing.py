@@ -61,29 +61,26 @@ pip install pyfiglet
 # User defined values: Parsed from the main script
 
 
-# File Export Path
-from argparse import ArgumentParser
+# # File Export Path
+# from argparse import ArgumentParser
 
-parser = ArgumentParser()
-print(parser)
-parser.add_argument("savepath",type=str)
-parser.add_argument("laser_pretrig", type=str)
-parser.add_argument("camera_pretrig", type=str)
-parser.add_argument("delay", type=str)
-parser.add_argument("measure_duration", type=str)
-parser.add_argument("sample_rate", type=str)
-args = parser.parse_args()
-savepath = args.savepath
-laser_pretrig = int(args.laser_pretrig)
-camera_pretrig = int(args.camera_pretrig)
-delay = int(args.delay)
-measure_duration = int(args.measure_duration)
-sample_rate = int(args.sample_rate)
+# parser = ArgumentParser()
+# print(parser)
+# parser.add_argument("savepath",type=str)
+# parser.add_argument("laser_pretrig", type=str)
+# parser.add_argument("camera_pretrig", type=str)
+# parser.add_argument("delay", type=str)
+# parser.add_argument("measure_duration", type=str)
+# parser.add_argument("sample_rate", type=str)
+# args = parser.parse_args()
+# savepath = args.savepath
+# laser_pretrig = int(args.laser_pretrig)
+# camera_pretrig = int(args.camera_pretrig)
+# delay = int(args.delay)
+# measure_duration = int(args.measure_duration)
+# sample_rate = int(args.sample_rate)
 
 #============================================================================== 
-
-
-
 
 
 
