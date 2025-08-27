@@ -3,8 +3,8 @@
 
 @author: Benjamin Bemis Ph.D Student, 
 
-This script initializes and operates the Notre Dame Modular Benchtop Vacuum 
-Chamber (MoBVaC) to be operated in PSP AUTO mode. This script modulates 
+This script initializes and operates the Notre Dame  Benchtop Vacuum 
+Chamber to be operated in PSP AUTO mode. This script modulates 
 temperature and pressure within the chamber. Camera and Lasers MUST be 
 triggered manually (This will be updated soon).  
 
