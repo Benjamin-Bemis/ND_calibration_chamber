@@ -21,14 +21,24 @@ Omega wiring: Black and White wires into AI0
 class ni:
     def __init__(self):
         self.time_vector = None
+        self.mks_time_vector = None
         self.pressure_kpa = None
+        self.mks_pressure_kpa = None
         self.pressure_kpa_mean = None
+        self.mks_pressure_kpa_mean = None
         self.raw_voltage = None
+        self.mks_raw_voltage = None
         self.all_times_omega = None
+        self.all_times_mks = None
         self.all_pressure_omega = None
+        self.all_pressure_mks = None
         self.all_pressure_mean_omega = None
+        self.all_pressure_mean_mks = None
         self.all_voltage_omega = [None]
+        self.all_voltage_mks = [None]
         self.all_voltage_omega_mean = None
+        self.all_voltage_mks_mean = None
+
         
     # DAQ Functions 
     def local_sys():
@@ -75,12 +85,25 @@ class ni:
     
         """
         with nidaq.Task() as task:
+            # if type(channel)=='dict':
+            #     print(channel)
+            #     keys = channel.keys()
+            #     for i in range(1,len(channel)):
+            #         task.ai_channels.add_ai_voltage_chan(f"{device_name}/{channel[keys[i]]}",max_val=10.0,min_val=-10.0)
+            #         task.timing.cfg_samp_clk_timing(sample_rate,sample_mode=nidaq.constants.AcquisitionType.CONTINUOUS)
+            #         # task.triggers.start_trigger.cfg_dig_edge_start_trig(trigger_source=f"{device_name}/{trigger_channel}",trigger_edge=nidaq.constants.Edge.RISING)
+            #         index = int(duration * sample_rate)
+            #         time_vector = np.arange(0, duration, 1/sample_rate)
+            #         data = task.read(number_of_samples_per_channel=index)
+            # else:
             task.ai_channels.add_ai_voltage_chan(f"{device_name}/{channel}",max_val=10.0,min_val=-10.0)
             task.timing.cfg_samp_clk_timing(sample_rate,sample_mode=nidaq.constants.AcquisitionType.CONTINUOUS)
             # task.triggers.start_trigger.cfg_dig_edge_start_trig(trigger_source=f"{device_name}/{trigger_channel}",trigger_edge=nidaq.constants.Edge.RISING)
             index = int(duration * sample_rate)
             time_vector = np.arange(0, duration, 1/sample_rate)
             data = task.read(number_of_samples_per_channel=index)
+            task.stop()
+            # task.clear()
             return data, time_vector
     
     
@@ -122,6 +145,29 @@ class ni:
         ni.pressure_kpa = pressure_kpa
         ni.pressure_kpa_mean = pressure_kpa_mean
         ni.raw_voltage = raw_voltage
+        
+        
+        
+        return [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage]
+    
+    
+    def mks_read(device_name, channels, trigger_channel, sample_rate, measure_duration):
+        test, time_vector = ni.record(device_name, channels, trigger_channel, sample_rate,measure_duration)
+        # test = [np.abs(x)*10 for x in test]
+        # pressure_kpa = [10**(x-4)/1000 for x in test]
+        pressure_kpa = [10**(x-4)/1000 for x in test]
+        # pressure_kpa = [x for x in test]
+
+        # pressure_kpa = [x*0.133322368 for x in pressure_torr]
+        # pressure_bar_mean = np.mean(pressure_bar)
+        pressure_kpa_mean = np.mean(pressure_kpa) # pressure_kpa
+        raw_voltage = test
+        
+        ni.mks_time_vector = time_vector
+        ni.mks_pressure_kpa = pressure_kpa
+        ni.mks_pressure_kpa_mean = pressure_kpa_mean
+        ni.mks_raw_voltage = raw_voltage
+        
         
         return [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage]
     

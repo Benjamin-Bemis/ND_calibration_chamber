@@ -261,7 +261,7 @@ for T in temp_set_pts:
     print("\n")
     times,temps = te.set_output_ss_monitor(T,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
     
-    for p in press_set_pts:
+    for p in press_set_pts:            
         OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
         new_time = new_time + elapsed_time/60
         total_time = np.append(total_time, new_time)
