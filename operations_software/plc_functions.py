@@ -126,23 +126,10 @@ def runOsciloscope(measure_duration, register):
     ttl_pulse(register, status = "off")
         
 def run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rate, measure_duration, register):
-    if len(channels) > 1:
-        omega_channel = channels["omega_channel"]
-        mks_channel = channels["mks_channel"]
-    ni.all_times_omega = []
-    ni.all_pressure_omega = []
-    ni.all_pressure_mean_omega = []
-    ni.all_voltage_omega = []
-    ni.all_voltage_omega_mean = []
     
-    ni.all_times_mks = []
-    ni.all_pressure_mks = []
-    ni.all_pressure_mean_mks = []
-    ni.all_voltage_mks = []
-    ni.all_voltage_mks_mean = []
     # Thread Code
     # ==============================================================================
-    thread1 = threading.Thread(target = ni.omega_read, args = (device_name, omega_channel, trigger_channel, sample_rate, measure_duration))
+    thread1 = threading.Thread(target = ni.pressure_read, args = (device_name, channels, trigger_channel, sample_rate, measure_duration))
     # thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, register))
     
     # =====================================================
@@ -154,83 +141,68 @@ def run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rat
     set_pressure(voltage_percent)
     time.sleep(15) # 15
     past_pressures = np.array([])
+    
     while not exit_loop:
-        if p>=10: # kPa, then use omega sensor
-            [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage] = ni.omega_read(device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
-            ni.mks_read(device_name, mks_channel, trigger_channel, sample_rate, measure_duration)
-        else:
-            ni.omega_read(device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
-            [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage] = ni.mks_read(device_name, mks_channel, trigger_channel, sample_rate, measure_duration)
+        ni.pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration) # class system doesn't have arguments returned
         
         print('last reading, omega: ', str(ni.pressure_kpa_mean))
         print('last reading, mks: ', str(ni.mks_pressure_kpa_mean))
-        if round(pressure_kpa_mean) == round(p):
+        print('weighted pressure reading: ', str(ni.pressure_weightedAvg_kpa))
+        
+        if round(ni.pressure_weightedAvg_kpa) == round(p):
             exit_loop = True
-            print('pressure successfully set: ', str(ni.pressure_kpa_mean))
+            print('pressure successfully set: ', str(ni.pressure_weightedAvg_kpa))
+            
+            # time for the controller to work
             end_time = time.time()
             elapsed_time = end_time - start_time
             mins, secs = divmod(elapsed_time, 60)
             print('time: ', str(mins), ' mins; ', str(int(secs)), ' seconds')
             
+            # recollect data, pressure set! this is for use with oscilloscope and other instruments
             thread1.start()
             # thread2.start()
             
             thread1.join()
             # thread2.join()
 
-            if p>=10: # kPa, then use omega sensor
-                thread1 = threading.Thread(target = ni.omega_read, args = (device_name, omega_channel, trigger_channel, sample_rate, measure_duration))
-    
-            else:
-                thread1 = threading.Thread(target = ni.mks_read, args = (device_name, mks_channel, trigger_channel, sample_rate, measure_duration))
-                # thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, register))
-
             
         else:
             Pcrit = 140
             count = count + 1
             
-            past_pressures = np.append(past_pressures, ni.pressure_kpa_mean)
+            past_pressures = np.append(past_pressures, ni.pressure_weightedAvg_kpa)
             if count > 1:
-                if round(past_pressures[-2], 1) == round(ni.pressure_kpa_mean, 1):
+                if round(past_pressures[-2], 1) == round(ni.pressure_weightedAvg_kpa, 1):
                     count = 1
                     Pcrit = Pcrit*2
                 last2Pressures = np.array([past_pressures[-2], past_pressures[-1]])
                 t = [1,2]
                 temp_vars = last2Pressures - p
                 slope, _ = np.polyfit(t, temp_vars, 1)
-                ix = ix + int(Pcrit*(p - ni.pressure_kpa_mean))
+                ix = ix + int(Pcrit*(p - ni.pressure_weightedAvg_kpa))
             else:
-                ix = int(Pcrit*(p - ni.pressure_kpa_mean))
+                ix = int(Pcrit*(p - ni.pressure_weightedAvg_kpa))
             voltage_percent = get_set_voltage(p, ix)
             print('hold on, reseting pressure to be closer to desired pressure of ', str(p), ' kPa')
             set_pressure(voltage_percent)
             time.sleep(15)
-        
-    ni.all_times_omega.append(ni.time_vector)
-    ni.all_pressure_omega.append(ni.pressure_kpa)
-    ni.all_pressure_mean_omega.append(ni.pressure_kpa_mean)
-    ni.all_voltage_omega.append(ni.raw_voltage)
     
-    ni.all_times_mks.append(ni.time_vector)
-    ni.all_pressure_mks.append(ni.pressure_kpa)
-    ni.all_pressure_mean_mks.append(ni.pressure_kpa_mean)
-    ni.all_voltage_mks.append(ni.raw_voltage)
+    # only the controller updates the lists from all the set values
+    ni.all_times_omega = np.concatenate([ni.all_times_omega, ni.time_vector], axis=0)
+    ni.all_pressure_omega = np.concatenate([ni.all_pressure_omega, ni.pressure_kpa], axis=0)
+    ni.all_pressure_mean_omega = np.concatenate([ni.all_pressure_mean_omega, np.array([ni.pressure_kpa_mean])], axis=0)
+    ni.all_voltage_omega = np.concatenate([ni.all_voltage_omega, ni.raw_voltage], axis=0)
     
-    ni.all_voltage_omega_mean.append(np.mean(ni.raw_voltage))
-    ni.all_voltage_mks_mean.append(np.mean(ni.raw_voltage))
+    ni.all_times_mks = np.concatenate([ni.all_times_mks, ni.mks_time_vector], axis=0)
+    ni.all_pressure_mks = np.concatenate([ni.all_pressure_mks, ni.mks_pressure_kpa], axis=0)
+    ni.all_pressure_mean_mks = np.concatenate([ni.all_pressure_mean_mks, np.array([ni.mks_pressure_kpa_mean])], axis=0)
+    ni.all_voltage_mks = np.concatenate([ni.all_voltage_mks, ni.mks_raw_voltage], axis=0)
     
-    DataDic = {'all_times_omega_array' : np.array(ni.all_times_omega),
-    'all_pressure_omega_array' : np.array(ni.all_pressure_omega),
-    'all_pressure_mean_omega_array' : np.array(ni.all_pressure_mean_omega),
-    'all_voltage_omega_array' : np.array(ni.all_voltage_omega),
-    'all_voltage_omega_mean_array' : np.array(ni.all_voltage_omega_mean),
+    ni.all_voltage_omega_mean = np.concatenate([ni.all_voltage_omega_mean, np.array([np.mean(ni.raw_voltage)])], axis=0)
+    ni.all_voltage_mks_mean = np.concatenate([ni.all_voltage_mks_mean, np.array([np.mean(ni.mks_raw_voltage)])], axis=0)
     
-    'all_times_mks_array' : np.array(ni.all_times_mks),
-    'all_pressure_mks_array' : np.array(ni.all_pressure_mks),
-    'all_pressure_mean_mks_array' : np.array(ni.all_pressure_mean_mks),
-    'all_voltage_mks_array' : np.array(ni.all_voltage_mks),
-    'all_voltage_mks_mean_array' : np.array(ni.all_voltage_mks_mean)
-    }
+    ni.all_pressure_weightedAvg_kpa = np.concatenate([ni.all_pressure_weightedAvg_kpa, np.array([ni.pressure_weightedAvg_kpa])], axis=0)
+    ni.all_pressure_weighted_uncert_kpa = np.concatenate([ni.all_pressure_weighted_uncert_kpa, np.array([ni.pressure_weighted_uncert_kpa])], axis=0)
      
-    return DataDic, elapsed_time
+    return elapsed_time

@@ -10,6 +10,7 @@ This function list defines functions for use with the NIDAQ
 import nidaqmx as nidaq
 import time
 import numpy as np
+from scipy.interpolate import CubicSpline
 
 """ 
 Notes:
@@ -22,12 +23,14 @@ class ni:
     def __init__(self):
         self.time_vector = None
         self.mks_time_vector = None
+
         self.pressure_kpa = None
         self.mks_pressure_kpa = None
         self.pressure_kpa_mean = None
         self.mks_pressure_kpa_mean = None
         self.raw_voltage = None
         self.mks_raw_voltage = None
+
         self.all_times_omega = None
         self.all_times_mks = None
         self.all_pressure_omega = None
@@ -38,6 +41,27 @@ class ni:
         self.all_voltage_mks = [None]
         self.all_voltage_omega_mean = None
         self.all_voltage_mks_mean = None
+        
+        self.pressure_weightedAvg_kpa = None
+        self.pressure_weighted_uncert_kpa = None
+        self.all_pressure_weightedAvg_kpa = None
+        self.all_pressure_weighted_uncert_kpa = None
+        
+    def initialize():
+        ni.all_times_omega = np.array([])
+        ni.all_pressure_omega = np.array([])
+        ni.all_pressure_mean_omega = np.array([])
+        ni.all_voltage_omega = np.array([])
+        ni.all_voltage_omega_mean = np.array([])
+        
+        ni.all_times_mks = np.array([])
+        ni.all_pressure_mks = np.array([])
+        ni.all_pressure_mean_mks = np.array([])
+        ni.all_voltage_mks = np.array([])
+        ni.all_voltage_mks_mean = np.array([])
+        
+        ni.all_pressure_weightedAvg_kpa = np.array([])
+        ni.all_pressure_weighted_uncert_kpa = np.array([])
 
         
     # DAQ Functions 
@@ -79,32 +103,33 @@ class ni:
     def record(device_name, channel,trigger_channel, sample_rate, duration):
         """
         NIDAQ function for use with the USB DAQs
-        purpose: opens channel on DAQ for recording in the continous mode. Records data for the specified duration at the specified sample rate. 
+        purpose: opens channels on DAQ for recording in the continous mode. Records data for the specified duration at the specified sample rate. 
         inputs: device 
         outputs: device_name
     
         """
         with nidaq.Task() as task:
-            # if type(channel)=='dict':
-            #     print(channel)
-            #     keys = channel.keys()
-            #     for i in range(1,len(channel)):
-            #         task.ai_channels.add_ai_voltage_chan(f"{device_name}/{channel[keys[i]]}",max_val=10.0,min_val=-10.0)
-            #         task.timing.cfg_samp_clk_timing(sample_rate,sample_mode=nidaq.constants.AcquisitionType.CONTINUOUS)
-            #         # task.triggers.start_trigger.cfg_dig_edge_start_trig(trigger_source=f"{device_name}/{trigger_channel}",trigger_edge=nidaq.constants.Edge.RISING)
-            #         index = int(duration * sample_rate)
-            #         time_vector = np.arange(0, duration, 1/sample_rate)
-            #         data = task.read(number_of_samples_per_channel=index)
-            # else:
-            task.ai_channels.add_ai_voltage_chan(f"{device_name}/{channel}",max_val=10.0,min_val=-10.0)
-            task.timing.cfg_samp_clk_timing(sample_rate,sample_mode=nidaq.constants.AcquisitionType.CONTINUOUS)
-            # task.triggers.start_trigger.cfg_dig_edge_start_trig(trigger_source=f"{device_name}/{trigger_channel}",trigger_edge=nidaq.constants.Edge.RISING)
-            index = int(duration * sample_rate)
-            time_vector = np.arange(0, duration, 1/sample_rate)
-            data = task.read(number_of_samples_per_channel=index)
+            if type(channel)==dict: # example -> channels = {"ai0" : "omega_channel" ,  "ai3" : "mks_channel" }
+                for key in channel.keys():
+                    task.ai_channels.add_ai_voltage_chan(f"{device_name}/{channel[key]}",max_val=10.0,min_val=0.0)
+                    task.timing.cfg_samp_clk_timing(sample_rate,sample_mode=nidaq.constants.AcquisitionType.CONTINUOUS)
+                    # task.triggers.start_trigger.cfg_dig_edge_start_trig(trigger_source=f"{device_name}/{trigger_channel}",trigger_edge=nidaq.constants.Edge.RISING)
+                index = int(duration * sample_rate)
+                time_vector = np.arange(0, duration, 1/sample_rate)
+                data = task.read(number_of_samples_per_channel=index)
+            else:
+                
+                task.ai_channels.add_ai_voltage_chan(f"{device_name}/{channel}",max_val=10.0,min_val=0.0)
+                task.timing.cfg_samp_clk_timing(sample_rate,sample_mode=nidaq.constants.AcquisitionType.CONTINUOUS)
+                # task.triggers.start_trigger.cfg_dig_edge_start_trig(trigger_source=f"{device_name}/{trigger_channel}",trigger_edge=nidaq.constants.Edge.RISING)
+                index = int(duration * sample_rate)
+                time_vector = np.arange(0, duration, 1/sample_rate)
+                data = task.read(number_of_samples_per_channel=index)
+                
             task.stop()
             # task.clear()
             return data, time_vector
+    
     
     
     def triggertest (length):
@@ -131,11 +156,12 @@ class ni:
         test, time_vector = ni.record(device_name, omega_channel, trigger_channel, sample_rate,measure_duration)
         
         #Omega Pressure setup
-        balence = 0.061                 #balenced at 0 bar
+        balance = 0.061                 #balenced at 0 bar
         sensitive = 1/10.095              #V/bar
+        sens_uncert = 0.0008*101325            # From data sheet the accuracy of the sensor is +-0.08% of FS (Full Scale is 101325)
     
         # test = [np.abs(x)*10 for x in test]
-        pressure_bar = [(sensitive*x + balence) for x in test]
+        pressure_bar = [(sensitive*x + balance) for x in test]
         pressure_kpa = [x*1e2 -4.9 for x in pressure_bar]
         # pressure_bar_mean = np.mean(pressure_bar)
         pressure_kpa_mean = np.mean(pressure_kpa)
@@ -145,21 +171,35 @@ class ni:
         ni.pressure_kpa = pressure_kpa
         ni.pressure_kpa_mean = pressure_kpa_mean
         ni.raw_voltage = raw_voltage
-        
+        ni.uncertainty_omega_pa = sens_uncert 
         
         
         return [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage]
     
+      
     
-    def mks_read(device_name, channels, trigger_channel, sample_rate, measure_duration):
-        test, time_vector = ni.record(device_name, channels, trigger_channel, sample_rate,measure_duration)
-        # test = [np.abs(x)*10 for x in test]
-        # pressure_kpa = [10**(x-4)/1000 for x in test]
-        pressure_kpa = [10**(x-4)/1000 for x in test]
-        # pressure_kpa = [x for x in test]
+    def mks_read(device_name, channel, trigger_channel, sample_rate, measure_duration):
+        test, time_vector = ni.record(device_name, channel, trigger_channel, sample_rate,measure_duration)
 
-        # pressure_kpa = [x*0.133322368 for x in pressure_torr]
-        # pressure_bar_mean = np.mean(pressure_bar)
+        pressure_kpa = []
+        # Data from MKS MicroPirani 925 datasheet Analog output calibration Equation 13. : [Pressure (Pa), Voltage (V)]
+        # Chosen for its sensitivity from its range from 1 to 100 Torr, outside this range the sensor is not accurate
+        data_mks = np.array([
+            [1.333E2, 0.1], [6.66E2, 0.5], [1.333E3, 1.0], [6.66E3, 5.0], [1.333E4, 10]
+            ])
+
+        cal_p_mks = data_mks[:, 0]
+        cal_v_mks = data_mks[:, 1]
+
+        # Calibration interpolation function: Voltage -> Log10(Pressure)
+        spline = CubicSpline(cal_v_mks, cal_p_mks)
+
+        def get_pressure_mks(v_input):
+            spline_pressure = spline(v_input)
+            return spline_pressure
+        
+        
+        pressure_kpa = [get_pressure_mks(x)*1e3 for x in test]
         pressure_kpa_mean = np.mean(pressure_kpa) # pressure_kpa
         raw_voltage = test
         
@@ -169,21 +209,111 @@ class ni:
         ni.mks_raw_voltage = raw_voltage
         
         
+        
         return [time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage]
     
-        # ploting the results
-        # plt.plot(time_vector,test)
-        # plt.xlabel('Time (s)')
-        # plt.ylabel('Voltage (V)')
-        # plt.show()
+    
+    def get_weighted_avg_pressure(mks_pressure_pa,omega_pressure_pa):
         
-        # plt.plot(time_vector,pressure_kpa)
-        # plt.xlabel('Time (s)')
-        # plt.ylabel('Pressure (kPa)')
-        # plt.show()
+        """
+        Combines the two pressure readings based on their uncertainties. 
+        Inputs should be in Pascals.
+        """
+        Torr_to_Pa = 133.322
+        FS = 101325 # Full scale range in Pa
+        
+        # Uncertainties
+        sigma_omega = 0.008*FS
+        
+        p_torr = mks_pressure_pa/Torr_to_Pa
+        
+        if 5e-4 <= p_torr < 1e-3:
+            sigma_mks = 0.1*mks_pressure_pa # 10% of measurement
+        elif 1e-3 <= p_torr < 100:
+            sigma_mks = 0.05*mks_pressure_pa # 5% of the measurement
+        elif p_torr >= 100:
+            sigma_mks = 0.25*mks_pressure_pa # 25% of the measurement
+        else: 
+            sigma_mks = 0.1*mks_pressure_pa # using nearest error for pressures extreme pressures (Not likely to be used)
+            
+        weight_omega = 1/(sigma_omega**2)
+        weight_mks = 1/(sigma_mks**2)
+        
+        p_combined = (weight_omega *omega_pressure_pa + weight_mks*mks_pressure_pa) / (weight_mks+weight_omega)
+        sigma = np.sqrt(1/(weight_omega+weight_mks))
+        return p_combined, sigma
+
+
+
+    def pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration):
+        """
+        Record voltages on the NI DAQ on both the omega pressure transducer and the MKS vacuum gauge. 
+        This function should replace read_omega and read_mks as it should record them in parallel.
+        Written by Ben Bemis 1/21/2026
+        """
+        test, time_vector = ni.record(device_name, channels, trigger_channel, sample_rate,measure_duration)
+
+        #Omega Pressure setup
+        balance = 0.061                 #balenced at 0 bar
+        sensitive = 1/10.095            #V/bar
+        
+        # Data from MKS MicroPirani 925 datasheet Analog output calibration Equation 13. : [Pressure (Pa), Voltage (V)]
+        # Chosen for its sensitivity from its range from 1 to 100 Torr, outside this range the sensor is not accurate
+        data_mks = np.array([
+            [1.333E2, 0.1], [6.66E2, 0.5], [1.333E3, 1.0], [6.66E3, 5.0], [1.333E4, 10]
+            ])
+
+        cal_p_mks = data_mks[:, 0]
+        cal_v_mks = data_mks[:, 1]
+
+        # Calibration interpolation function: Voltage -> Pressure
+        spline = CubicSpline(cal_v_mks, cal_p_mks)
+
+        def get_pressure_mks(v_input):
+            spline_pressure = spline(v_input)
+            return spline_pressure
         
         
-        # plt.plot(time_vector,pressure_kpa)
-        # plt.xlabel('Time (s)')
-        # plt.ylabel('Pressure (kPa)')
-        # plt.show()
+        
+        # Conversion from voltage to pressure using the factory calibration for the Omega sensor
+        omega_pressure_bar = [(sensitive*x + balance) for x in test[0]]
+        omega_pressure_kpa = [x*1e2 -4.9 for x in omega_pressure_bar]
+        # pressure_bar_mean = np.mean(pressure_bar)
+        omega_pressure_kpa_mean = np.mean(omega_pressure_kpa)
+        omega_raw_voltage = test[0]
+        
+        
+        # Conversion from voltage to presssure for the MKS
+        mks_pressure_kpa = [get_pressure_mks(x)*1e3 for x in test[1]]
+        mks_pressure_kpa_mean = np.mean(mks_pressure_kpa) # pressure_kpa
+        mks_raw_voltage = test[1]
+        
+        
+        # Combination of the two pressure transducers
+        combined_pressure = []
+        sigma = []
+        for pt in range(len(test[0])):
+            combined_pressure_new, sigma_new = ni.get_weighted_avg_pressure(mks_pressure_kpa[pt]*1e3, omega_pressure_kpa[pt]*1e3)
+            combined_pressure = np.append(combined_pressure, combined_pressure_new)
+            sigma = np.append(sigma, sigma_new)
+
+            
+        
+        
+        
+        # Writing Omega sensor to class
+        ni.time_vector = time_vector
+        ni.pressure_kpa = omega_pressure_kpa
+        ni.pressure_kpa_mean = omega_pressure_kpa_mean
+        ni.raw_voltage = omega_raw_voltage
+
+        # Writing MKS to class
+        ni.mks_time_vector = time_vector
+        ni.mks_pressure_kpa = mks_pressure_kpa
+        ni.mks_pressure_kpa_mean = mks_pressure_kpa_mean
+        ni.mks_raw_voltage = mks_raw_voltage
+        
+        # Writing Combined weighted average to class
+        ni.pressure_weightedAvg_kpa = float(np.mean(combined_pressure*1e-3))
+        ni.pressure_weighted_uncert_kpa = float(np.mean(sigma*1e-3))
+    

@@ -12,13 +12,8 @@ triggered manually (This will be updated soon).
 Please see psp_calibration_controls as the parent code that this code is based
 on
 
-Version: 1.1
-Updated: 2/15/2024
-"""
-"""
-To Do:
-    See if stanza highlighted needs to be deleted
-    Double check
+Version: 2.0
+Updated: 1/22/2026
 """
 
 
@@ -29,7 +24,6 @@ from ni_functions import ni
 from scipy.io import savemat
 import plc_functions as plc
 import pyfiglet as figlet
-import matplotlib.pyplot as plt
 
 # Timing Variables
 laser_pretrig = 3              # Pretrigger time in seconds
@@ -106,7 +100,8 @@ omega_channel = "ai0"
 device_name = ni.local_sys()
 mks_channel = "ai3"
 # mks transducer
-channels = {"omega_channel" : "ai0", "mks_channel" : "ai3"}
+channels = {"omega_channel" : "ai0",
+            "mks_channel" : "ai3"}
 
 
 # ==============================================================================
@@ -116,110 +111,56 @@ camera = 2          #Modbus register on the plc for the camera was 1
 register = laser
 # ==============================================================================
 
-# =====================================================
-# Initializing the save variables
-all_times_omega_array = np.array([])
-all_pressure_omega_array =  np.array([])
-all_pressure_mean_omega_array =  np.array([])
-all_voltage_omega_array =  np.array([])
-all_voltage_omega_mean_array = np.array([])
-
-all_times_mks_array = np.array([])
-all_pressure_mks_array =  np.array([])
-all_pressure_mean_mks_array =  np.array([])
-all_voltage_mks_array =  np.array([])
-all_voltage_mks_mean_array = np.array([])
-
 total_time = np.array([])
 new_time = 0
-# =====================================================
 
 delay = 10                                                                      # Delay time in seconds
 pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
 
-boolean = True
-
 # Kulite Balancing - comment in when dealing with Kulites:
     #############################
-mid_range_pressure = (press_set_pts[-1] - press_set_pts[0])/2 + press_set_pts[0]
-DataDic, elapsed_time = plc.run_PLC_Controller(ni, mid_range_pressure, device_name, omega_channel, mks_channel, trigger_channel, sample_rate, measure_duration, register)
+# mid_range_pressure = (press_set_pts[-1] - press_set_pts[0])/2 + press_set_pts[0]
+# DataDic, elapsed_time = plc.run_PLC_Controller(ni, mid_range_pressure, device_name, channels, trigger_channel, sample_rate, measure_duration, register)
 
-while True:
-    try:
-        move_on = float(input("press enter after kulite is balanced and ready \n"))
-    except ValueError:
-        print('moving on: \n')
-        break
+# while True:
+#     try:
+#         move_on = float(input("press enter after kulite is balanced and ready \n"))
+#     except ValueError:
+#         print('moving on: \n')
+#         break
 ###########################################
 
-for p in press_set_pts:
-    if mks_channel:
-        DataDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rate, measure_duration, register)
-    else:
-        DataDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, mks_channel, trigger_channel, sample_rate, measure_duration, register)
+ni.initialize() # initializes variables
+
+for _ , p in enumerate(press_set_pts):
+    elapsed_time = plc.run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rate, measure_duration, register)
 
     new_time = new_time + elapsed_time/60
     total_time = np.append(total_time, new_time)
-    
-    if boolean:
-        all_times_omega_array = np.append(all_times_omega_array, DataDic['all_times_omega_array'])
-        all_pressure_omega_array = np.append(all_pressure_omega_array, DataDic['all_pressure_omega_array'])
-        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, DataDic['all_pressure_mean_omega_array'])
-        all_voltage_omega_array = np.append(all_voltage_omega_array, DataDic['all_voltage_omega_array'])
-        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, DataDic['all_voltage_omega_mean_array'])
-        
-        all_times_mks_array = np.append(all_times_mks_array, DataDic['all_times_mks_array'])
-        all_pressure_mks_array = np.append(all_pressure_mks_array, DataDic['all_pressure_mks_array'])
-        all_pressure_mean_mks_array = np.append(all_pressure_mean_mks_array, DataDic['all_pressure_mean_mks_array'])
-        all_voltage_mks_array = np.append(all_voltage_mks_array, DataDic['all_voltage_mks_array'])
-        all_voltage_mks_mean_array = np.append(all_voltage_mks_mean_array, DataDic['all_voltage_mks_mean_array'])
-        boolean = False
-    else:
-        all_times_omega_array = np.vstack((all_times_omega_array, DataDic['all_times_omega_array']))
-        all_pressure_omega_array = np.vstack((all_pressure_omega_array, DataDic['all_pressure_omega_array']))
-        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, DataDic['all_pressure_mean_omega_array'])
-        all_voltage_omega_array = np.vstack((all_voltage_omega_array, DataDic['all_voltage_omega_array']))
-        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, DataDic['all_voltage_omega_mean_array'])
-    
-        all_times_mks_array = np.vstack((all_times_mks_array, DataDic['all_times_mks_array']))
-        all_pressure_mks_array = np.vstack((all_pressure_mks_array, DataDic['all_pressure_omega_array']))
-        all_pressure_mean_mks_array = np.append(all_pressure_mean_mks_array, DataDic['all_pressure_mean_mks_array'])
-        all_voltage_mks_array = np.vstack((all_voltage_mks_array, DataDic['all_voltage_mks_array']))
-        all_voltage_mks_mean_array = np.append(all_voltage_mks_mean_array, DataDic['all_voltage_mks_mean_array'])
-    
-    f = plt.figure(1)
-    f.clear()
-    oscillations = round(np.max(DataDic['all_pressure_omega_array'])-np.min(DataDic['all_pressure_omega_array']),4)
-    plt.plot(all_times_omega_array, all_pressure_omega_array)
-    plt.xlabel('time, mins')
-    string = 'pressure| range: '+ str(oscillations)
-    plt.ylabel(string)
-    plt.title('time vs pressure')
-
-if len(press_set_pts) > 1:    
-    g = plt.figure(2)
-    g.clear()
-    plt.plot(total_time, press_set_pts)
-    plt.xlabel('time, minutes')
-    plt.ylabel('set pressure, kPa')
-    plt.title('system accuracy for pressure readings')
-    error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
-    plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
 
 # Saving the various arrays from the data collection as .mat files
-savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,
-                                              "pressure_kpa_mean":all_pressure_mean_omega_array,
-                                              "time": all_times_omega_array,
-                                              "voltage_raw":all_voltage_omega_array,
+savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": ni.all_pressure_omega,
+                                              "pressure_kpa_mean": ni.all_pressure_mean_omega,
+                                              "time": ni.all_times_omega,
+                                              "voltage_raw": ni.all_voltage_omega,
                                               "p_setpoints": press_set_pts,
-                                              "voltage_raw_mean" : all_voltage_omega_mean_array,
-                                              
-                                              "pressure_mks_kpa": all_pressure_mks_array,
-                                              "pressure_kpa_mks_mean": all_pressure_mean_mks_array,
-                                              "mks_time": all_times_mks_array,
-                                              "voltage_mks_raw":all_voltage_mks_array,
-                                              "voltage_raw_mks_mean" : all_voltage_mks_mean_array
+                                              "voltage_raw_mean" : ni.all_voltage_omega_mean,
                                               })
+                                              
+savemat(os.path.join(savepath, "mks.mat"), {
+                                              "pressure_mks_kpa": ni.all_pressure_mks,
+                                              "pressure_kpa_mks_mean": ni.all_pressure_mean_mks,
+                                              "mks_time": ni.all_times_mks,
+                                              "voltage_mks_raw": ni.all_voltage_mks,
+                                              "voltage_raw_mks_mean" : ni.all_voltage_mks_mean
+                                              })
+
+savemat(os.path.join(savepath, "pressure.mat"), {
+                                              "all_pressure_kpa": ni.all_pressure_weightedAvg_kpa,
+                                              "all_pressure_uncert": ni.all_pressure_weighted_uncert_kpa,
+                                              "time": ni.all_times_omega,
+                                              })
+
 print("="*50)
 print(f"Data has been saved to this directory: {savepath}")
 print("="*50)
