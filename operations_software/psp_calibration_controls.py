@@ -208,11 +208,10 @@ trigger_channel = "port1/line0"
 omega_channel = "ai0"
 mks_channel = "ai3"
 channels = {"omega_channel" : "ai0", "mks_channel" : "ai3"}
-device_name = ni.local_sys()
 # ==============================================================================
 # plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
-laser = 1           #Modbus register on the plc for the laser
-camera = 2          #Modbus register on the plc for the camera
+laser = 2           #Modbus register on the plc for the laser (Modbus Register: 400002)
+camera = 3          #Modbus register on the plc for the camera (Modbus Register: 400003)
 register = laser
 # ==============================================================================
 
@@ -221,10 +220,7 @@ register = laser
 # Initializing the save variables
 
 ni.initialize() # initializes pressure variables
-
-all_times_te = []
-all_temps_te = []
-all_avg_temp = np.array([])
+te.initialize(te) # initializes pressure variables
 
 total_time = np.array([])
 new_time = 0
@@ -239,11 +235,11 @@ for T in temp_set_pts:
     print(f"Data for temperature setpoint: {T} has been begun:")
     print("="*50)
     print("\n")
-    times,temps = te.set_output_ss_monitor(T,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
+    te.set_output_ss_monitor(T,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
     
     # run through the pressures
-    for _ , p in enumerate(press_set_pts):
-        elapsed_time = plc.run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rate, measure_duration, register)
+    for idx , p in enumerate(press_set_pts):
+        elapsed_time = plc.run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register)
         new_time = new_time + elapsed_time/60
         total_time = np.append(total_time, new_time)
 
@@ -268,8 +264,9 @@ for T in temp_set_pts:
 
         print("Collection has begun:")
         print("="*50)
+        device_name = ni.local_sys()
         temp_before_collection = te.therm_read()
-        time_vector, pressure_kpa, pressure_kpa_mean, raw_voltage = ni.omega_read(device_name, omega_channel, trigger_channel, sample_rate, measure_duration)
+        ni.pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration)
         temp_after_collection = te.therm_read()
         print("Collection has ended:")
         print("="*50)
@@ -279,18 +276,14 @@ for T in temp_set_pts:
         # plc.ttl_pulse(camera, status = "off")
        #==============================================================================
         
+       
     
     
-    
-        avg_temp_col = (temp_after_collection+temp_after_collection)/2
-        all_avg_temp.append(avg_temp_col)
-        avg_temp_array = np.array(all_avg_temp)
+        avg_temp_col = (temp_before_collection+temp_after_collection)/2
+        te.all_avg_temp  = np.concatenate([te.all_avg_temp, np.array([avg_temp_col])], axis=0)
         
-        all_times_te.append(times)
-        all_temps_te.append(temps)
-        all_times_te_array = np.array(all_times_te)
-        all_temps_te_array = np.array(all_temps_te)
-          
+        te.all_times_te = np.concatenate([te.all_times_te, np.array([te.times])], axis=0)
+        te.all_temps_te = np.concatenate([te.all_temps_te, np.array([te.temps])], axis=0)
             
     print(f"Data for temperature setpoint: {T} has been collected")
     print("="*50)
@@ -303,12 +296,22 @@ print("="*50)
 print("\n")
         
 # Saving the various arrays from the data collection as .mat files       
-savemat(os.path.join(savepath, "te.mat"), {"times_te": all_times_te_array, "temps_te": all_temps_te_array, "t_setpoints": temp_set_pts})
-savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,"pressure_kpa_mean":all_pressure_mean_omega_array,"time": all_times_omega_array,"avg_temp":avg_temp_array,"voltage_raw":all_voltage_omega_array,"p_setpoints": press_set_pts})
+savemat(os.path.join(savepath, "te.mat"), {
+                                            "times_te": te.all_times_te, 
+                                            "temps_te": te.all_temps_te,
+                                            "te_average_temps": te.all_avg_temp,
+                                            "t_setpoints": te.temp_set_pts})
+
+savemat(os.path.join(savepath, "pressure.mat"), {
+                                              "all_pressure_kpa": ni.all_pressure_weightedAvg_kpa,
+                                              "all_pressure_uncert": ni.all_pressure_weighted_uncert_kpa,
+                                              "time": ni.all_times_omega,
+                                              })
 print("="*50)
 print(f"Data has been saved to this directory: {savepath}")
 print("="*50)
 print("\n")
+
 
 # main()
 
