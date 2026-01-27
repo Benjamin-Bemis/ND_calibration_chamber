@@ -97,7 +97,6 @@ else:
 # DAQ setup
 trigger_channel = "port1/line0"
 omega_channel = "ai0"
-device_name = ni.local_sys()
 mks_channel = "ai3"
 # mks transducer
 channels = {"omega_channel" : "ai0",
@@ -133,7 +132,7 @@ pause = np.linspace(1,delay,delay)                                              
 ni.initialize() # initializes variables
 
 for _ , p in enumerate(press_set_pts):
-    elapsed_time = plc.run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rate, measure_duration, register)
+    elapsed_time = plc.run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register)
 
     new_time = new_time + elapsed_time/60
     total_time = np.append(total_time, new_time)
