@@ -20,11 +20,18 @@ import numpy as np
 class te:
     def __init__(self):
         self.temp = None
+        self.temps = None
+        self.times = None
+        
+        self.all_times_te = None
+        self.all_temps_te = None
+        self.all_avg_temp = None
         
         
-        
-        
-        
+    def initialize(self):
+        self.all_times_te = np.array([])
+        self.all_temps_te = np.array([])
+        self.all_avg_temp = np.array([])
         
         
     def decthex(decimal_number):
@@ -108,7 +115,7 @@ class te:
     
     
     
-    def therm_read():
+    def therm_read(self):
         buf=[0,0,0,0,0,0,0,0,0,0,0,0,0] # initializes the read value to be filled by the controller 
         bst=['*','0','1','0','0','0','0','2','1','\r']
     
@@ -121,16 +128,16 @@ class te:
                 buf[pn]=ser.read(1)
                 # print(buf[pn])
         ser.close()
-        te.temp=hexc2dec(buf)/100.0
+        self.temp=self.hexc2dec(buf)/100.0
         
         return
     
     
-    def set_temp(temp_set_point):
+    def set_temp(self,temp_set_point):
         # temp_set_point must be in C
-        setpoint = decthex(temp_set_point)
-        command,_ = TE_command("st")
-        checksum = TE_checksum(command,setpoint)
+        setpoint = self.decthex(temp_set_point)
+        command,_ = self.TE_command("st")
+        checksum = self.TE_checksum(command,setpoint)
         
         bstc=['*']
         bstc.extend(command)
@@ -148,7 +155,7 @@ class te:
         print("="*50)
         print("\n")
                 
-    def output_enable(setting):
+    def output_enable(self, setting):
         match setting:
             case "on":
                 setpoint = ['0','0','0','1']
@@ -159,8 +166,8 @@ class te:
                 return "Error: Incorrect command given. TE output set to off for safety."
             
             
-        command,_ = TE_command("oe")
-        checksum = TE_checksum(command,setpoint)
+        command,_ = self.TE_command("oe")
+        checksum = self.TE_checksum(command,setpoint)
         
         bstc=['*']
         bstc.extend(command)
@@ -179,31 +186,31 @@ class te:
         ser.close()
         
     
-    def set_output_ss_monitor(setpoint,interval,ss_length):
+    def set_output_ss_monitor(self, setpoint,interval,ss_length):
         # pid_selector(int(setpoint))
-        set_temp(int(setpoint))
-        current_temp = therm_read()
+        self.set_temp(int(setpoint))
+        current_temp = self.therm_read()
         diff = np.abs(setpoint - current_temp)
         # diff = 1
-        output_enable("on")
+        self.output_enable("on")
         print("TE is on")
         print("="*50)
         print("\n")
         counter = 0
-        temps = []
+        te.temps = []
         length = int((ss_length*60)/interval)
         init = np.linspace(0,length,num=length)
         for x in init:
             # print(counter)
-            current_temp = therm_read()
+            current_temp = self.therm_read()
             print(current_temp)
             print("="*50)
             print("\n")
-            temps.append(current_temp)
+            te.temps.append(current_temp)
             time.sleep(interval)
             counter += 1
             
-        data = temps[counter - length:counter]       
+        data = te.temps[counter - length:counter]       
         sum_data = sum(data)
         avg  = sum_data / length
         print(f"Moving Average Temperature: {avg}")
@@ -212,7 +219,7 @@ class te:
         diff = np.abs(setpoint - avg) 
         while diff > 0.5:
                  # print(counter)
-            data = temps[counter - length:counter]       
+            data = te.temps[counter - length:counter]       
             sum_data = sum(data)
             avg  = sum_data / length
             print(f"Moving Average Temperature: {avg}")
@@ -221,11 +228,11 @@ class te:
             diff = np.abs(setpoint - avg) 
             
             counter += 1
-            current_temp = therm_read()
+            current_temp = self.therm_read()
             print(current_temp)
             print("="*50)
             print("\n")
-            temps.append(current_temp)
+            te.temps.append(current_temp)
     
             time.sleep(interval)  
         
@@ -233,10 +240,9 @@ class te:
         print("Steady State has been reached:")    
         print("="*50)
         print("\n")
-        times = np.linspace(counter - length,counter,num=length)       
+        te.times = np.linspace(counter - length,counter,num=length)       
         # output_enable("off")  
         # print("TE is off")     
-        return times, data
     
     
     
