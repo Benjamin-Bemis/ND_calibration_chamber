@@ -71,6 +71,7 @@ class ni:
     
         for device in system.devices:
             device_name = ni.get_device_info(device)
+        
         return(device_name)
     
     

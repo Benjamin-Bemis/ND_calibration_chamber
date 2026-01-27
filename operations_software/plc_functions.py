@@ -125,8 +125,26 @@ def runOsciloscope(measure_duration, register):
     time.sleep(measure_duration)
     ttl_pulse(register, status = "off")
         
-def run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rate, measure_duration, register):
+def run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register):
     
+    """
+        solution to controlling the pressure with a seemingly uncalibrateable pressure regulator
+        Uses proportional control plus extra logic to set pressure in a timely fashion
+        
+        argumnents in:
+            ni - this is the class of functions and stored variables belonging to the ni class package created in ni_functions.py
+            p - this is a list of the desired set pressures
+            channels - this is a dictionary of the channels being used in the 6009 DAQ
+            sample_rate - desired sample rate
+            measure_duration - this is number of desired points/sample rate
+            register - ends up being the modbus address for the oscilloscope
+            
+        outputs
+            there are no outputs, because all of the data is populated into the ni class. each row of the data matrix is a set pressure.
+            some rows will have 1 column and some will have enough columns per the data points in the measure duration
+    """
+    device_name = ni.local_sys()
+
     # Thread Code
     # ==============================================================================
     thread1 = threading.Thread(target = ni.pressure_read, args = (device_name, channels, trigger_channel, sample_rate, measure_duration))
@@ -206,3 +224,25 @@ def run_PLC_Controller(ni, p, device_name, channels, trigger_channel, sample_rat
     ni.all_pressure_weighted_uncert_kpa = np.concatenate([ni.all_pressure_weighted_uncert_kpa, np.array([ni.pressure_weighted_uncert_kpa])], axis=0)
      
     return elapsed_time
+
+def open_circuit(modbus_address, status):
+    '''
+    similar to ttl_pulse, for monitoring an open circuit
+    '''
+    c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
+    
+    if status:
+        print(f"circuit open: {modbus_address}")
+        print("\n")
+        
+    elif not status:
+        # Close the Modbus connection
+        c.close()
+        print(f"circuit left closed: {modbus_address}")
+        print("\n")
+    
+    else:
+        print("Unable to open Modbus connection")
+        print("="*50)
+        print("\n")
+        
