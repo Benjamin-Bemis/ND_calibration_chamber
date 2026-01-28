@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Nov  3 16:21:22 2023
+Created on 11/3/2023
 
-@author: Benjamin Bemis Ph.D Student
-99.87250764300121
-(p_range.min(), p_range.max())
+Author: Benjamin Bemis Ph.D Student
+
 """
 from pyModbusTCP.client import ModbusClient
 import numpy as np
 import time
 import threading
+import logging # Allows console logging for debugging
 
 def Psi2kPa(Psi):
     '''
@@ -71,6 +71,13 @@ def set_pressure(voltage_percent):
 
 
 def view_set_pressure():
+    """
+    This function queries the PLC for the current set pressure of the regulator.
+
+    Returns
+    -------
+    Current pressure as a float.
+    """
     c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
     set_point = c.read_holding_registers(0)
     set_point = int(set_point[0])/100
@@ -80,12 +87,36 @@ def view_set_pressure():
     c.close()
     return (p_range[set_pressure_index])
 
-def ttl_pulse(register,status):
+def ttl_pulse(register,status):   
+    
+    """
+    This function turns on and off a 5V signal. This can be used to make a square wave for triggering external devices.
+    
+    Author: Benjamin Bemis 
+    Updated: 1/28/2026
+    
+    Parameters
+    ----------
+    register : This is the PLC register number minus 1. Note that Modbus addresses are 0-based, so 400002 becomes 1 (Expected values should be 1 or 2).
+    status : 'on' or 'off'. This give either a 0V or 5V.
+
+    Returns
+    -------
+    No returns. However, there are updates written to the console.
+
+
+    """
+    # Setup of the debugger logging
+    # logging.basicConfig()
+    # logging.getLogger('pyModbusTCP.client').setLevel(logging.DEBUG)
+    
+    
+    # Base function:    
     c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
     
-    if c.open():
+    if c.open(): # this function needs to use the open() command not is_open. They return conflicting booleen logic
         # Define the Modbus address to write to (400001)
-        modbus_address = register  # Note that Modbus addresses are 0-based, so 400001 becomes 1
+        modbus_address = register  # Note that Modbus addresses are 0-based, so 400002 becomes 1
         match status:
             case 'on':
                 # Define the data to write (for example, a single integer value)
@@ -128,10 +159,13 @@ def runOsciloscope(measure_duration, register):
 def run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register):
     
     """
-        solution to controlling the pressure with a seemingly uncalibrateable pressure regulator
-        Uses proportional control plus extra logic to set pressure in a timely fashion
+        Solution to controlling the pressure with a uncalibrateable pressure regulator.
+        Uses proportional control plus extra logic to set pressure in a timely fashion.
         
-        argumnents in:
+        Author: Luke Denn
+        Updated: 1/20/2026
+        
+        Arguments:
             ni - this is the class of functions and stored variables belonging to the ni class package created in ni_functions.py
             p - this is a list of the desired set pressures
             channels - this is a dictionary of the channels being used in the 6009 DAQ
@@ -139,7 +173,7 @@ def run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_du
             measure_duration - this is number of desired points/sample rate
             register - ends up being the modbus address for the oscilloscope
             
-        outputs
+        Outputs:
             there are no outputs, because all of the data is populated into the ni class. each row of the data matrix is a set pressure.
             some rows will have 1 column and some will have enough columns per the data points in the measure duration
     """
@@ -225,21 +259,50 @@ def run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_du
      
     return elapsed_time
 
-def open_circuit(modbus_address, status):
+def closed_contact(status):
     '''
-    similar to ttl_pulse, for monitoring an open circuit
+    Similar to ttl_pulse, This function is to make a closed contact for triggering external devices.
+    
+    Author: Benjamin Bemis
+    Updated: 1/28/2026
+        
+    Parameters: 
+        status - 'on' or 'off'. 'on' will close the normally open contact. 'off' will reopen it.
+        
+    Return: 
+        Print outs to console, the status of the command sent to the PLC.
     '''
     c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
     
-    if status:
-        print(f"circuit open: {modbus_address}")
+    # For the CLICK PLC model: C0-12DRE-D
+    modbus_address = 16384  # Note that Modbus addresses are 0-based, so 16384 becomes 16385 or channel y1 
+    match status:
+        case 'on':
+            # Define the data to write (0 or 1)
+            data_to_write = 1; # This is writing a 1 bit (1 is a closed true contact)
+        
+            # Write the data to the specified Modbus address
+            is_success = c.write_single_coil(modbus_address, data_to_write)
+            print(f"Contact is closed: {modbus_address}")
+            print("\n")
+        case 'off':
+            # Define the data to write (0 or 1)
+            data_to_write = 0; # This is writing a 0 bit
+        
+            # Write the data to the specified Modbus address
+            is_success = c.write_single_coil(modbus_address, data_to_write)
+            print(f"Contact is open: {modbus_address}")
+            print("\n")
+        case _:
+            return "You have asked the plc to do something other than on or off."
+    c.close() # Close the communication port
+    
+    if is_success:
+        print("="*50)
+        print(f"Successfully wrote: {data_to_write} to PLC
+        print("="*50)
         print("\n")
         
-    elif not status:
-        # Close the Modbus connection
-        c.close()
-        print(f"circuit left closed: {modbus_address}")
-        print("\n")
     
     else:
         print("Unable to open Modbus connection")
