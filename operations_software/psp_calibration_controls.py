@@ -210,8 +210,8 @@ mks_channel = "ai3"
 channels = {"omega_channel" : "ai0", "mks_channel" : "ai3"}
 # ==============================================================================
 # plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
-laser = 2           #Modbus register on the plc for the laser (Modbus Register: 400002)
-camera = 3          #Modbus register on the plc for the camera (Modbus Register: 400003)
+laser = 1           #Modbus register on the plc for the laser (Modbus Register: 400002)
+camera = 2          #Modbus register on the plc for the camera (Modbus Register: 400003)
 register = laser
 # ==============================================================================
 

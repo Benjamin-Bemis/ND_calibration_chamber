@@ -104,9 +104,9 @@ channels = {"omega_channel" : "ai0",
 
 
 # ==============================================================================
-# plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
-laser = 1           #Modbus register on the plc for the laser was 2
-camera = 2          #Modbus register on the plc for the camera was 1
+# plc variables (Fill these with the correct registries, i.e.  0 = 400001, 1 = 400002, etc.)
+laser = 1           #Modbus register on the plc for the laser 1
+camera = 2          #Modbus register on the plc for the camera is 2
 register = laser
 # ==============================================================================
 
@@ -131,7 +131,7 @@ pause = np.linspace(1,delay,delay)                                              
 
 ni.initialize() # initializes variables
 
-for _ , p in enumerate(press_set_pts):
+for p in enumerate(press_set_pts):
     elapsed_time = plc.run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register)
 
     new_time = new_time + elapsed_time/60
