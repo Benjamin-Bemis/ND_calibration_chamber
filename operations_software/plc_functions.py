@@ -9,38 +9,75 @@ from pyModbusTCP.client import ModbusClient
 import numpy as np
 import time
 import threading
-import logging # Allows console logging for debugging
+# import logging # Allows console logging for debugging
+import scipy
 
 def Psi2kPa(Psi):
     '''
-    pressure conversion, Psi to kPa
+    Pressure conversion, Psi to kPa
     
-    Proportion air tuned so 1.4100141001410016 V is 50kPa
-    Psi2kPa(upper_range + atmospherePressure)
+    Input: Pressure in Psi
+    Return: Pressure in kPa
+    
     '''
     kPa = Psi*6.894757
     return kPa
 
-atm = 100 # Psi
-upper_range = 500 #psig referenced from the data sheet
 
-#Regulator pressure range in kPa. Note: this is absolute pressure
-p_range = np.linspace(-1*Psi2kPa(upper_range)/20, 5.15*Psi2kPa(upper_range)/40, num = 100000)
 
-#voltage_pt_range = np.linspace(0, 10, num = 100000)
-voltage_pt_range = np.interp(p_range, (p_range.min(), p_range.max()), (0, 100)) 
 
 def find_closest_value_index(value, array):
     array = np.asarray(array)
     index = np.abs(array - value).argmin()
     return index
 
-def get_set_voltage(pressure, ix):
-    index = find_closest_value_index(pressure, p_range)
-    return voltage_pt_range[index+ix]
+def get_set_voltage(p):  
+    """
+    Function uses the regulator calibration curve to find the voltage percent to write to the PLC to control the pressure regulator.
+    the filepath to the regulator calibration is hard-coded.
+    
+    inputs: desired pressure
+    outputs: pressure, as a percent
+    
+    """
+    
+    # specific to regulator, from calibration
+    # =========================================================================
+    calibration = 'C:/Users/Calibration Chamber/Documents/GitHub/ND_calibration_chamber/operations_software/regulator_calibration/cal_2_5_26.mat'
+    data = scipy.io.loadmat(calibration)
+    pressure_cal = data.get('mean_combined_kpa')
+    voltage_vec = data.get('set_voltage')
+    
+    pressure_cal = pressure_cal.tolist()
+    voltage_vec = voltage_vec.tolist()
+    voltages = []
+    
+    # if np array was 2D, might have to take out the second dimension
+    if isinstance(pressure_cal[0],list):
+        pressure_cal = pressure_cal[0]
+        voltage_vec = voltage_vec[0]
+    
+    # remove duplicates, always takes first of duplicates
+    for idx, value in enumerate(voltage_vec):
+        if value not in voltages:
+            voltages.append(value)
+        else:
+            pressure_cal.pop(idx) 
+            voltage_vec.pop(idx)
+            
+    # relationship is linear, inc v -> incr p. interp function requires an increasing function in x
+    pressure_cal.sort(reverse = False) # var.sort(reverse = False) Sorts a list to be in accending order
+    voltage_vec.sort(reverse = False)
+    # =========================================================================
+    
+    voltage2set = np.interp(p, pressure_cal, voltage_vec)
+
+    return voltage2set
 
 
-def set_pressure(voltage_percent):
+def set_pressure(pressure):
+    
+    voltage = get_set_voltage(pressure)
     c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
     # Open the Modbus connection
     if c.open():
@@ -49,16 +86,17 @@ def set_pressure(voltage_percent):
     
         # Define the data to write (for example, a single integer value)
         
-        data_to_write = int(100*voltage_percent)
+        data_to_write = int(1000*voltage) # This multiplication is to get three points of percision. 
         # Write the data to the specified Modbus address
         is_success = c.write_single_register(modbus_address, data_to_write)
     
         if is_success:
-            print(f"Successfully wrote {voltage_percent} to the PLC: Modbus address {modbus_address}")
+            # print(f"Successfully wrote {voltage*1e-3} Volts to the PLC. The pressure was set to {place_holder_for_set_pressure}")
+            view_set_pressure()
             print("="*50)
             print("\n")
         else:
-            print(f"Failed to write to Modbus address {modbus_address}")
+            print(f"Failed to write to the PLC at: {modbus_address}")
             print("="*50)
             print("\n")
     
@@ -80,12 +118,42 @@ def view_set_pressure():
     """
     c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
     set_point = c.read_holding_registers(0)
-    set_point = int(set_point[0])/100
-    print('set_point: ', set_point)
-    set_pressure_index = find_closest_value_index(set_point, voltage_pt_range)
-    print('set_pressure_index: ',str(set_pressure_index))
+    set_point = int(set_point[0])/1000
+    print(f"Current Voltage: {set_point/10} V")
+    
+    # specific to regulator, from calibration
+    # =========================================================================
+    calibration = 'C:/Users/Calibration Chamber/Documents/GitHub/ND_calibration_chamber/operations_software/regulator_calibration/cal_2_5_26.mat'
+    data = scipy.io.loadmat(calibration)
+    pressure_cal = data.get('mean_combined_kpa')
+    voltage_vec = data.get('set_voltage')
+    
+    pressure_cal = pressure_cal.tolist()
+    voltage_vec = voltage_vec.tolist()
+    voltages = []
+    
+    # if np array was 2D, might have to take out the second dimension
+    if isinstance(pressure_cal[0],list):
+        pressure_cal = pressure_cal[0]
+        voltage_vec = voltage_vec[0]
+    
+    # remove duplicates, always takes first of duplicates
+    for idx, value in enumerate(voltage_vec):
+        if value not in voltages:
+            voltages.append(value)
+        else:
+            pressure_cal.pop(idx) 
+            voltage_vec.pop(idx)
+            
+    # relationship is linear, inc v -> incr p. interp function requires an increasing function in x
+    pressure_cal.sort(reverse = False) # var.sort(reverse = False) Sorts a list to be in accending order
+    voltage_vec.sort(reverse = False)
+    # =========================================================================
+    p = np.interp(set_point, voltage_vec, pressure_cal)
     c.close()
-    return (p_range[set_pressure_index])
+    
+    print(f"Set Pressure: {p} kPa")
+    return 
 
 def ttl_pulse(register,status):   
     
@@ -150,115 +218,8 @@ def ttl_pulse(register,status):
         print("Unable to open Modbus connection")
         print("="*50)
         print("\n")
-        
-def runOsciloscope(measure_duration, register):
-    ttl_pulse(register, status = "on")
-    time.sleep(measure_duration)
-    ttl_pulse(register, status = "off")
-        
-def run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register):
-    
-    """
-        Solution to controlling the pressure with a uncalibrateable pressure regulator.
-        Uses proportional control plus extra logic to set pressure in a timely fashion.
-        
-        Author: Luke Denn
-        Updated: 1/20/2026
-        
-        Arguments:
-            ni - this is the class of functions and stored variables belonging to the ni class package created in ni_functions.py
-            p - this is a list of the desired set pressures
-            channels - this is a dictionary of the channels being used in the 6009 DAQ
-            sample_rate - desired sample rate
-            measure_duration - this is number of desired points/sample rate
-            register - ends up being the modbus address for the oscilloscope
-            
-        Outputs:
-            there are no outputs, because all of the data is populated into the ni class. each row of the data matrix is a set pressure.
-            some rows will have 1 column and some will have enough columns per the data points in the measure duration
-    """
-    device_name = ni.local_sys()
 
-    # Thread Code
-    # ==============================================================================
-    thread1 = threading.Thread(target = ni.pressure_read, args = (device_name, channels, trigger_channel, sample_rate, measure_duration))
-    # thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, register))
     
-    # =====================================================
-    start_time = time.time()
-    exit_loop = False
-    ix = 0
-    count = 0
-    voltage_percent = get_set_voltage(p, ix)
-    set_pressure(voltage_percent)
-    time.sleep(15) # 15
-    past_pressures = np.array([])
-    
-    while not exit_loop:
-        ni.pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration) # class system doesn't have arguments returned
-        
-        print('last reading, omega: ', str(ni.pressure_kpa_mean))
-        print('last reading, mks: ', str(ni.mks_pressure_kpa_mean))
-        print('weighted pressure reading: ', str(ni.pressure_weightedAvg_kpa))
-        
-        if round(ni.pressure_weightedAvg_kpa) == round(p):
-            exit_loop = True
-            print('pressure successfully set: ', str(ni.pressure_weightedAvg_kpa))
-            
-            # time for the controller to work
-            end_time = time.time()
-            elapsed_time = end_time - start_time
-            mins, secs = divmod(elapsed_time, 60)
-            print('time: ', str(mins), ' mins; ', str(int(secs)), ' seconds')
-            
-            # recollect data, pressure set! this is for use with oscilloscope and other instruments
-            thread1.start()
-            # thread2.start()
-            
-            thread1.join()
-            # thread2.join()
-
-            
-        else:
-            Pcrit = 140
-            count = count + 1
-            
-            past_pressures = np.append(past_pressures, ni.pressure_weightedAvg_kpa)
-            if count > 1:
-                if round(past_pressures[-2], 1) == round(ni.pressure_weightedAvg_kpa, 1):
-                    count = 1
-                    Pcrit = Pcrit*2
-                last2Pressures = np.array([past_pressures[-2], past_pressures[-1]])
-                t = [1,2]
-                temp_vars = last2Pressures - p
-                slope, _ = np.polyfit(t, temp_vars, 1)
-                ix = ix + int(Pcrit*(p - ni.pressure_weightedAvg_kpa))
-            else:
-                ix = int(Pcrit*(p - ni.pressure_weightedAvg_kpa))
-            voltage_percent = get_set_voltage(p, ix)
-            print('hold on, reseting pressure to be closer to desired pressure of ', str(p), ' kPa')
-            set_pressure(voltage_percent)
-            time.sleep(15)
-    
-    # only the controller updates the lists from all the set values
-    ni.all_times_omega = np.concatenate([ni.all_times_omega, ni.time_vector], axis=0)
-    ni.all_pressure_omega = np.concatenate([ni.all_pressure_omega, ni.pressure_kpa], axis=0)
-    ni.all_pressure_mean_omega = np.concatenate([ni.all_pressure_mean_omega, np.array([ni.pressure_kpa_mean])], axis=0)
-    ni.all_voltage_omega = np.concatenate([ni.all_voltage_omega, ni.raw_voltage], axis=0)
-    
-    ni.all_times_mks = np.concatenate([ni.all_times_mks, ni.mks_time_vector], axis=0)
-    ni.all_pressure_mks = np.concatenate([ni.all_pressure_mks, ni.mks_pressure_kpa], axis=0)
-    ni.all_pressure_mean_mks = np.concatenate([ni.all_pressure_mean_mks, np.array([ni.mks_pressure_kpa_mean])], axis=0)
-    ni.all_voltage_mks = np.concatenate([ni.all_voltage_mks, ni.mks_raw_voltage], axis=0)
-    
-    ni.all_voltage_omega_mean = np.concatenate([ni.all_voltage_omega_mean, np.array([np.mean(ni.raw_voltage)])], axis=0)
-    ni.all_voltage_mks_mean = np.concatenate([ni.all_voltage_mks_mean, np.array([np.mean(ni.mks_raw_voltage)])], axis=0)
-    
-    ni.all_pressure_weightedAvg_kpa = np.concatenate([ni.all_pressure_weightedAvg_kpa, np.array([ni.pressure_weightedAvg_kpa])], axis=0)
-    ni.all_pressure_weighted_uncert_kpa = np.concatenate([ni.all_pressure_weighted_uncert_kpa, np.array([ni.pressure_weighted_uncert_kpa])], axis=0)
-     
-    return elapsed_time
-
 def closed_contact(status):
     '''
     Similar to ttl_pulse, This function is to make a closed contact for triggering external devices.
@@ -299,7 +260,7 @@ def closed_contact(status):
     
     if is_success:
         print("="*50)
-        print(f"Successfully wrote: {data_to_write} to PLC
+        print(f"Successfully wrote: {data_to_write} to PLC")
         print("="*50)
         print("\n")
         
@@ -309,3 +270,137 @@ def closed_contact(status):
         print("="*50)
         print("\n")
         
+        
+        
+def runOsciloscope(measure_duration, register):
+    ttl_pulse(register, status = "on")
+    time.sleep(measure_duration)
+    ttl_pulse(register, status = "off")
+        
+def calibration_chamber_pressure(ni, p, channels, trigger_channel, sample_rate, measure_duration, register):
+    """
+        Setting pressure from a pressure calibration vector to our pressure regulator
+        
+        Author: Luke Denn
+        Updated: 2/05/2026
+        
+        Arguments:
+            ni - this is the class of functions and stored variables belonging to the ni class package created in ni_functions.py
+            p - this is a list of the desired set pressures
+            channels - this is a dictionary of the channels being used in the 6009 DAQ
+            sample_rate - desired sample rate
+            measure_duration - this is number of desired points/sample rate
+            register - ends up being the modbus address for the oscilloscope
+            
+        Outputs:
+            there are no outputs, because all of the data is populated into the ni class. each row of the data matrix is a set pressure.
+            some rows will have 1 column and some will have enough columns per the data points in the measure duration
+    """
+    start_time = time.time()
+    device_name = ni.local_sys()
+    
+    voltage = get_set_voltage(p)
+    set_pressure(voltage)
+    time.sleep(30) # give the regulator time to act
+
+    # collect data and update data storage
+    ni.pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration)
+    ni.update()
+    
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    mins, secs = divmod(elapsed_time, 60)
+    print('time: ', str(mins), ' mins; ', str(int(secs)), ' seconds')
+    
+    return elapsed_time
+    
+    
+def run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register):
+    
+    """
+        Solution to controlling the pressure with a uncalibrateable pressure regulator.
+        Uses proportional control plus extra logic to set pressure in a timely fashion.
+        
+        Author: Luke Denn
+        Updated: 1/20/2026
+        
+        OBSOLETE: 2/3/2026 BENJAMIN BEMIS
+        
+        Arguments:
+            ni - this is the class of functions and stored variables belonging to the ni class package created in ni_functions.py
+            p - this is a list of the desired set pressures
+            channels - this is a dictionary of the channels being used in the 6009 DAQ
+            sample_rate - desired sample rate
+            measure_duration - this is number of desired points/sample rate
+            register - ends up being the modbus address for the oscilloscope
+            
+        Outputs:
+            there are no outputs, because all of the data is populated into the ni class. each row of the data matrix is a set pressure.
+            some rows will have 1 column and some will have enough columns per the data points in the measure duration
+    """
+    device_name = ni.local_sys()
+
+    # Thread Code
+    # ==============================================================================
+    thread1 = threading.Thread(target = ni.pressure_read, args = (device_name, channels, trigger_channel, sample_rate, measure_duration))
+    # thread2 = threading.Thread(target = runOsciloscope, args = (measure_duration, register))
+    
+    # =====================================================
+    start_time = time.time()
+    exit_loop = False
+    ix = 0
+    count = 0
+    voltage = get_set_voltage(p, ix)
+    set_pressure(voltage)
+    time.sleep(30) # Time to wait until vacuum settles
+    past_pressures = np.array([])
+    
+    while not exit_loop:
+        ni.pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration) # class system doesn't have arguments returned
+        past_pressures = np.append(past_pressures, ni.pressure_weightedAvg_kpa)
+        count = count + 1
+
+        print('last reading, omega: ', str(ni.pressure_kpa_mean))
+        print('last reading, mks: ', str(ni.mks_pressure_kpa_mean))
+        print('weighted pressure reading: ', str(ni.pressure_weightedAvg_kpa))
+        
+        if np.abs(ni.pressure_weightedAvg_kpa - p) == 0.05:
+            exit_loop = True
+            print('pressure successfully set: ', str(ni.pressure_weightedAvg_kpa))
+            
+            # time for the controller to work
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            mins, secs = divmod(elapsed_time, 60)
+            print('time: ', str(mins), ' mins; ', str(int(secs)), ' seconds')
+            
+            # recollect data, pressure set! this is for use with oscilloscope and other instruments
+            thread1.start()
+            # thread2.start()
+            
+            thread1.join()
+            # thread2.join()
+
+            
+        else:
+            Pgain = 200
+            Dgain = Pgain/3
+            Igain = Pgain/8
+            
+            if count < 1:
+                ix = ix + int(Pgain*(p - ni.pressure_weightedAvg_kpa))
+            elif count > 1:
+                # previous error - 2x prev error = (p - past(-1)) - (p - past(-2) = past(-2) - past(-1)
+                slope = past_pressures[-2] - past_pressures[-1] # difference in pressures over iteration, denominator is 1
+                ix = Pgain*(p - ni.pressure_weightedAvg_kpa) + slope*Dgain + Igain*np.sum(p-past_pressures)
+                print(ix)
+                
+            voltage = get_set_voltage(p, ix)
+            print('hold on, reseting pressure to be closer to desired pressure of ', str(p), ' kPa')
+            set_pressure(voltage)
+            time.sleep(15)
+    
+    # only the controller updates the lists from all the set values
+    ni.update()
+     
+    return elapsed_time

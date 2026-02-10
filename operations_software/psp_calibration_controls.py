@@ -3,31 +3,22 @@
 
 @author: Benjamin Bemis Ph.D Student, 
 
-This script initializes and operates the Notre Dame Modular Benchtop Vacuum 
-Chamber (MoBVaC) to be operated in PSP AUTO mode. This script modulates 
-temperature and pressure within the chamber. Camera and Lasers MUST be 
-triggered manually (This will be updated soon).  
+This script initializes and operates the Notre Dame Vacuum 
+Chamber to be operated in PSP AUTO mode. This script modulates 
+temperature and pressure within the chamber. Camera and Lasers are automatically triggered. 
+The user should still set the pretrigger times for the laser and camera for their needs.
+  
 
-Version: 1.1
-Updated: 2/2/2024
-
-"""
-
-
-
-
+Version: 2.0
+Updated: 1/28/2026
 
 """
-To-do list 
 
 
--add package install miniscript just below the import block so that the correct packages can be installed
 
--figure out pressure sensor disparity and regulator 
 
--impliment camera control(Add to PLC program)
 
--impliment laser control(Add to PLC program)
+"""
 """
 
 
@@ -80,11 +71,11 @@ pip install pyfiglet
 
 
 # File Export Path
-test_series = "TSP_characterization_4_2024/"                               # Make sure to update this line with the name of the tests. Ex. "11_17_23_intensity_tests"
-samples_loaded = "LAM_SIN/"                                                        # Names of the samples loaded into the calibration chamber
-data_folder = "Matlab_exports/"                                                # This is the folder generated to house all the export folders
-base_folder = "C:/Users/17409/OneDrive/Documents/Calibration Chamber Data/"
-savepath = os.path.join(base_folder, (data_folder + test_series + samples_loaded))
+test_series = "init/"                               # Make sure to update this line with the name of the tests. Ex. "11_17_23_intensity_tests"
+samples_loaded = "test_1/"                                                        # Names of the samples loaded into the calibration chamber
+project_folder = "Lockheed_pro/"                                                # This is the folder generated to house all the export folders
+base_folder = "C:/Users/Calibration Chamber/Desktop/Data/"
+savepath = os.path.join(base_folder, (project_folder + test_series + samples_loaded))
 
 
 # Timing Variables
@@ -133,7 +124,7 @@ while True:
                 temp_set_pts = [low_temp]
                 while True:
                     try:
-                        additional_pt = float(input("Input additional points or hit enter to end: \n"))
+                        additional_pt = int(input("Input additional points or hit enter to end: \n"))
                         temp_set_pts.append(additional_pt)
                     except ValueError:
                         print(f"The temperature range to be used is {temp_set_pts} \n")
@@ -153,9 +144,9 @@ while True:
         init_press_choice = input("How would you like your pressure profile to be generated? Linspace, Manual, or Vector: \n")
         match init_press_choice:
             case"Vector":
-                low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
-                high_press = int(input("Input the highest pressure in kPa: \n"))
-                interval = int(input("Input the interval or step: \n"))
+                low_press = float(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
+                high_press = float(input("Input the highest pressure in kPa: \n"))
+                interval = float(input("Input the interval or step: \n"))
                 
                 
                 press_set_pts = np.arange(low_press, high_press+1, step=interval) # this is the vector of the pressure set points of the regulator
@@ -169,7 +160,7 @@ while True:
                 press_set_pts = np.linspace(low_press, high_press, num=num_points) # this is the vector of the pressure set points of the regulator
                 print(f"The pressure range to be used is {press_set_pts} \n")
             case "Manual":
-                low_press = int(input("Input the lowest pressure in kPa: \n"))
+                low_press = float(input("Input the lowest pressure in kPa: \n"))
                 press_set_pts = [low_press]
                 while True:
                     try:
@@ -184,7 +175,9 @@ while True:
         break
     except ValueError:
         print("Nothing entered. Exiting Script \n")
-  
+
+press_set_pts.sort(reverse = True) # pressure regulator is most accurate when setting decreasing pressures
+
 # Initializes the directory for saving the data
 if not os.path.exists(savepath):
     os.makedirs(savepath)                                                      # Recursively make all directories
@@ -209,10 +202,9 @@ omega_channel = "ai0"
 mks_channel = "ai3"
 channels = {"omega_channel" : "ai0", "mks_channel" : "ai3"}
 # ==============================================================================
-# plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
-laser = 1           #Modbus register on the plc for the laser (Modbus Register: 400002)
-camera = 2          #Modbus register on the plc for the camera (Modbus Register: 400003)
-register = laser
+# plc variables (Fill these with the correct registries, i.e. 2 = 400001, 3 = 4000002 etc.)
+trigger = 1           #Modbus register on the plc for the laser (Modbus Register: 400001)
+# ttl_2 = 2          #Modbus register on the plc for the camera (Modbus Register: 400002)
 # ==============================================================================
 
 
@@ -220,7 +212,7 @@ register = laser
 # Initializing the save variables
 
 ni.initialize() # initializes pressure variables
-te.initialize(te) # initializes pressure variables
+te.initialize() # initializes pressure variables
 
 total_time = np.array([])
 new_time = 0
@@ -235,13 +227,18 @@ for T in temp_set_pts:
     print(f"Data for temperature setpoint: {T} has been begun:")
     print("="*50)
     print("\n")
-    te.set_output_ss_monitor(T,interval=0.1,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
+    te.set_output_ss_monitor(T,interval=0.02,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
     
     # run through the pressures
     for idx , p in enumerate(press_set_pts):
-        elapsed_time = plc.run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, register)
-        new_time = new_time + elapsed_time/60
-        total_time = np.append(total_time, new_time)
+        plc.set_pressure(p)
+        delay(30)
+        
+        # elapsed_time = plc.run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, trigger)
+        # new_time = new_time + elapsed_time/60
+        # total_time = np.append(total_time, new_time)
+
+
 
         #=============================================================================
         #       Completed block for automated camera and laser triggering
@@ -255,10 +252,10 @@ for T in temp_set_pts:
             time.sleep(1)
             time_elapse = int(time.time()-start)
             if delay - time_elapse == laser_pretrig:
-                plc.ttl_pulse(laser,status = "on")
+                plc.ttl_pulse(trigger,status = "on")
                 print("Laser triggered. \n")
             elif delay - time_elapse == camera_pretrig:
-                plc.ttl_pulse(camera, status = "on")
+                plc.closed_contact(status = "on")
                 print("Camera triggered. \n")
              
 
@@ -271,20 +268,19 @@ for T in temp_set_pts:
         print("Collection has ended:")
         print("="*50)
  
+        avg_temp_col = (temp_before_collection+temp_after_collection)/2
+ 
+        # update values ##########################
+        ni.update()
+        te.update(avg_temp_col)
+        ##########################################
+        
         # Turning off the camera and the laser
-        plc.ttl_pulse(laser, status = "off")
-        # plc.ttl_pulse(camera, status = "off")
+        plc.ttl_pulse(trigger, status = "off")
+        plc.closed_contact(status = "off")
        #==============================================================================
         
-       
-    
-    
-        avg_temp_col = (temp_before_collection+temp_after_collection)/2
-        te.all_avg_temp  = np.concatenate([te.all_avg_temp, np.array([avg_temp_col])], axis=0)
-        
-        te.all_times_te = np.concatenate([te.all_times_te, np.array([te.times])], axis=0)
-        te.all_temps_te = np.concatenate([te.all_temps_te, np.array([te.temps])], axis=0)
-            
+
     print(f"Data for temperature setpoint: {T} has been collected")
     print("="*50)
     print("\n")
@@ -297,15 +293,15 @@ print("\n")
         
 # Saving the various arrays from the data collection as .mat files       
 savemat(os.path.join(savepath, "te.mat"), {
-                                            "times_te": te.all_times_te, 
-                                            "temps_te": te.all_temps_te,
-                                            "te_average_temps": te.all_avg_temp,
-                                            "t_setpoints": te.temp_set_pts})
+                                            "times_te": te.te_vars.all_times_te, 
+                                            "temps_te": te.te_vars.all_temps_te,
+                                            "te_average_temps": te.te_vars.all_avg_temp,
+                                            "t_setpoints": te.te_vars.temp_set_pts})
 
 savemat(os.path.join(savepath, "pressure.mat"), {
-                                              "all_pressure_kpa": ni.all_pressure_weightedAvg_kpa,
-                                              "all_pressure_uncert": ni.all_pressure_weighted_uncert_kpa,
-                                              "time": ni.all_times_omega,
+                                              "all_pressure_kpa": ni.ni_vars.all_pressure_weightedAvg_kpa,
+                                              "all_pressure_uncert": ni.ni_vars.all_pressure_weighted_uncert_kpa,
+                                              "time": ni.ni_vars.all_times_omega,
                                               })
 print("="*50)
 print(f"Data has been saved to this directory: {savepath}")
