@@ -12,15 +12,9 @@ triggered manually (This will be updated soon).
 Please see psp_calibration_controls as the parent code that this code is based
 on
 
-Version: 1.1
-Updated: 2/15/2024
+Version: 2.0
+Updated: 1/22/2026
 """
-"""
-To Do:
-    See if stanza highlighted needs to be deleted
-    Double check
-"""
-
 
 
 import numpy as np
@@ -43,9 +37,9 @@ folderPath = os.path.dirname(__file__)
 chamberPath = os.path.dirname(folderPath)
 savepath = os.path.join(chamberPath, 'LabTesting')
 
-print(figlet.figlet_format("MoBVaC"))                                          # ASCII print out of the chamber name
+print(figlet.figlet_format("Calibration Chamber"))                                          # ASCII print out of the chamber name
 print(50*"=")
-print(figlet.figlet_format("PSP Auto"))     
+print(figlet.figlet_format("Pressure Auto"))     
 
 
 # Pressure in kpa
@@ -54,23 +48,23 @@ while True:
         init_press_choice = input("How would you like your pressure profile to be generated? Linspace, Manual, or Vector: \n")
         match init_press_choice:
             case"Vector":
-                low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
-                high_press = int(input("Input the highest pressure in kPa: \n"))
-                interval = int(input("Input the interval or step: \n"))
+                low_press = float(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
+                high_press = float(input("Input the highest pressure in kPa: \n"))
+                interval = float(input("Input the interval or step: \n"))
                 
                 
                 press_set_pts = np.arange(low_press, high_press+1, step=interval) # this is the vector of the pressure set points of the regulator
                 print(f"The pressure range to be used is {press_set_pts} \n")
             case "Linspace":
-                low_press = int(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
-                high_press = int(input("Input the highest pressure in kPa: \n"))
-                num_points = int(input("Input the number of points inbetween: \n"))
+                low_press = float(input("Input the lowest pressure in kPa: \n" )) #These must be int for the linspace command
+                high_press = float(input("Input the highest pressure in kPa: \n"))
+                num_points = float(input("Input the number of points inbetween: \n"))
                 
                 
                 press_set_pts = np.linspace(low_press, high_press, num=num_points) # this is the vector of the pressure set points of the regulator
                 print(f"The pressure range to be used is {press_set_pts} \n")
             case "Manual":
-                low_press = int(input("Input the lowest pressure in kPa: \n"))
+                low_press = float(input("Input the lowest pressure in kPa: \n"))
                 press_set_pts = [low_press]
                 while True:
                     try:
@@ -85,6 +79,9 @@ while True:
         break
     except ValueError:
         print("Nothing entered. Exiting Script \n")
+        
+press_set_pts.sort(reverse = True) # pressure regulator is most accurate when setting decreasing pressures
+
         
 # Initializes the directory for saving the data
 if not os.path.exists(savepath):
@@ -103,87 +100,69 @@ else:
 # DAQ setup
 trigger_channel = "port1/line0"
 omega_channel = "ai0"
-device_name = ni.local_sys()
+mks_channel = "ai3"
+# mks transducer
+channels = {"omega_channel" : "ai0",
+            "mks_channel" : "ai3"}
+
+
 # ==============================================================================
-# plc variables (Fill these with the correct registries, i.e. 0 = 400000, 1 = 400001, etc.)
-laser = 1           #Modbus register on the plc for the laser was 2
-camera = 2          #Modbus register on the plc for the camera was 1
+# plc variables (Fill these with the correct registries, i.e.  0 = 400001, 1 = 400002, etc.)
+laser = 1           #Modbus register on the plc for the laser 1
+camera = 2          #Modbus register on the plc for the camera is 2
 register = laser
 # ==============================================================================
 
-# =====================================================
-# Initializing the save variables
-all_times_omega_array = np.array([])
-all_pressure_omega_array =  np.array([])
-all_pressure_mean_omega_array =  np.array([])
-all_voltage_omega_array =  np.array([])
-all_voltage_omega_mean_array = np.array([])
 total_time = np.array([])
 new_time = 0
-# =====================================================
 
 delay = 10                                                                      # Delay time in seconds
 pause = np.linspace(1,delay,delay)                                              # Initializing the array to be printed out during the delay print out
 
-boolean = True
+# Kulite Balancing - comment in when dealing with Kulites:
+    #############################
+# mid_range_pressure = (press_set_pts[-1] - press_set_pts[0])/2 + press_set_pts[0]
+# DataDic, elapsed_time = plc.run_PLC_Controller(ni, mid_range_pressure, device_name, channels, trigger_channel, sample_rate, measure_duration, register)
 
-# Kulite Balancing
-mid_range_pressure = (press_set_pts[-1] - press_set_pts[0])/2 + press_set_pts[0]
-OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, mid_range_pressure, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
+# while True:
+#     try:
+#         move_on = float(input("press enter after kulite is balanced and ready \n"))
+#     except ValueError:
+#         print('moving on: \n')
+#         break
+###########################################
 
-while True:
-    try:
-        move_on = float(input("press enter after kulite is balanced and ready \n"))
-    except ValueError:
-        print('moving on: \n')
-        break
+ni.initialize() # initializes variables
 
 for p in press_set_pts:
-    OmegaDic, elapsed_time = plc.run_PLC_Controller(ni, p, device_name, omega_channel, trigger_channel, sample_rate, measure_duration, register)
+    elapsed_time = plc.calibration_chamber_pressure(ni, p, channels, trigger_channel, sample_rate, measure_duration, register)
+
     new_time = new_time + elapsed_time/60
     total_time = np.append(total_time, new_time)
-    
-    if boolean:
-        all_times_omega_array = np.append(all_times_omega_array, OmegaDic['all_times_omega_array'])
-        all_pressure_omega_array = np.append(all_pressure_omega_array, OmegaDic['all_pressure_omega_array'])
-        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
-        all_voltage_omega_array = np.append(all_voltage_omega_array, OmegaDic['all_voltage_omega_array'])
-        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
-        boolean = False
-    else:
-        all_times_omega_array = np.vstack((all_times_omega_array, OmegaDic['all_times_omega_array']))
-        all_pressure_omega_array = np.vstack((all_pressure_omega_array, OmegaDic['all_pressure_omega_array']))
-        all_pressure_mean_omega_array = np.append(all_pressure_mean_omega_array, OmegaDic['all_pressure_mean_omega_array'])
-        all_voltage_omega_array = np.vstack((all_voltage_omega_array, OmegaDic['all_voltage_omega_array']))
-        all_voltage_omega_mean_array = np.append(all_voltage_omega_mean_array, OmegaDic['all_voltage_omega_mean_array'])
-    
-    f = plt.figure(1)
-    f.clear()
-    oscillations = round(np.max(OmegaDic['all_pressure_omega_array'])-np.min(OmegaDic['all_pressure_omega_array']),4)
-    plt.plot(all_times_omega_array, all_pressure_omega_array)
-    plt.xlabel('time, mins')
-    string = 'pressure| range: '+ str(oscillations)
-    plt.ylabel(string)
-    plt.title('time vs pressure')
-
-if len(press_set_pts) > 1:    
-    g = plt.figure(2)
-    g.clear()
-    plt.plot(total_time, press_set_pts)
-    plt.xlabel('time, minutes')
-    plt.ylabel('set pressure, kPa')
-    plt.title('system accuracy for pressure readings')
-    error = [abs(press_set_pts[idx] - value) for idx, value in enumerate(all_pressure_mean_omega_array)]
-    plt.errorbar(total_time, press_set_pts, yerr = error, xerr = None, marker = 'o')
 
 # Saving the various arrays from the data collection as .mat files
-savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": all_pressure_omega_array,
-                                              "pressure_kpa_mean":all_pressure_mean_omega_array,
-                                              "time": all_times_omega_array,
-                                              "voltage_raw":all_voltage_omega_array,
+savemat(os.path.join(savepath, "omega.mat"), {"pressure_kpa": ni.ni_vars.all_pressure_omega,
+                                              "pressure_kpa_mean": ni.ni_vars.all_pressure_mean_omega,
+                                              "time": ni.ni_vars.all_times_omega,
+                                              "voltage_raw": ni.ni_vars.all_voltage_omega,
                                               "p_setpoints": press_set_pts,
-                                              "voltage_raw_mean" : all_voltage_omega_mean_array
+                                              "voltage_raw_mean" : ni.ni_vars.all_voltage_omega_mean,
                                               })
+                                              
+savemat(os.path.join(savepath, "mks.mat"), {
+                                              "pressure_mks_kpa": ni.ni_vars.all_pressure_mks,
+                                              "pressure_kpa_mks_mean": ni.ni_vars.all_pressure_mean_mks,
+                                              "mks_time": ni.ni_vars.all_times_mks,
+                                              "voltage_mks_raw": ni.ni_vars.all_voltage_mks,
+                                              "voltage_raw_mks_mean" : ni.ni_vars.all_voltage_mks_mean
+                                              })
+
+savemat(os.path.join(savepath, "pressure.mat"), {
+                                              "all_pressure_kpa": ni.ni_vars.pressure_combined_kpa,
+                                              "all_pressure_uncert": ni.ni_vars.pressure_combined_sigma_kpa,
+                                              "time": ni.ni_vars.all_times_omega,
+                                              })
+
 print("="*50)
 print(f"Data has been saved to this directory: {savepath}")
 print("="*50)
