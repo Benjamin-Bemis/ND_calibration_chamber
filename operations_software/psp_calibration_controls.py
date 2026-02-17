@@ -30,6 +30,7 @@ from scipy.io import savemat
 import time
 import plc_functions as plc
 import pyfiglet as figlet
+import threading
 
 ''' 
 Package install script
@@ -205,14 +206,18 @@ channels = {"omega_channel" : "ai0", "mks_channel" : "ai3"}
 # plc variables (Fill these with the correct registries, i.e. 2 = 400001, 3 = 4000002 etc.)
 trigger = 1           #Modbus register on the plc for the laser (Modbus Register: 400001)
 # ttl_2 = 2          #Modbus register on the plc for the camera (Modbus Register: 400002)
+steady_time = 0.1      # minutes, usually 2
 # ==============================================================================
 
 
 # =====================================================
 # Initializing the save variables
 
-ni.initialize() # initializes pressure variables
-te.initialize() # initializes pressure variables
+Pdx_len = len(press_set_pts)
+Tdx_len = len(temp_set_pts)
+
+ni.initialize(Pdx_len, Tdx_len, measure_duration*sample_rate) # initializes pressure variables
+te.initialize(Pdx_len, Tdx_len) # initializes pressure variables
 
 total_time = np.array([])
 new_time = 0
@@ -223,16 +228,27 @@ pause = np.linspace(1,delay,delay)                                              
 
 # =====================================================
 # Bulk Operation
-for T in temp_set_pts:
+
+for Tdx, T in enumerate(temp_set_pts):
     print(f"Data for temperature setpoint: {T} has been begun:")
     print("="*50)
     print("\n")
-    te.set_output_ss_monitor(T,interval=0.02,ss_length=2)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
+    te.set_output_ss_monitor(T,interval=0.02,ss_length=steady_time)         # Setting the temperature of the TE and monitoring for steady state contitions over the given length in minutes 
     
     # run through the pressures
-    for idx , p in enumerate(press_set_pts):
+    for Pdx , p in enumerate(press_set_pts):
+        b = False
+        
+        if Pdx:
+            if np.abs(press_set_pts[Pdx-1] - p) < 1:
+                plc.set_pressure(p+5)
+                b = True
+        
+        if b:
+            time.sleep(30)
+
         plc.set_pressure(p)
-        delay(30)
+        time.sleep(30)
         
         # elapsed_time = plc.run_PLC_Controller(ni, p, channels, trigger_channel, sample_rate, measure_duration, trigger)
         # new_time = new_time + elapsed_time/60
@@ -252,7 +268,7 @@ for T in temp_set_pts:
             time.sleep(1)
             time_elapse = int(time.time()-start)
             if delay - time_elapse == laser_pretrig:
-                plc.ttl_pulse(trigger,status = "on")
+                plc.laser_pulse(trigger,status = "on")
                 print("Laser triggered. \n")
             elif delay - time_elapse == camera_pretrig:
                 plc.closed_contact(status = "on")
@@ -262,17 +278,29 @@ for T in temp_set_pts:
         print("Collection has begun:")
         print("="*50)
         device_name = ni.local_sys()
-        temp_before_collection = te.therm_read()
-        ni.pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration)
-        temp_after_collection = te.therm_read()
+        
+        
+        
+        # temp_before_collection = te.therm_read()
+        # ni.pressure_read(device_name, channels, trigger_channel, sample_rate, measure_duration)
+        # temp_after_collection = te.therm_read()
+        
+        # threads
+        thread1 = threading.Thread(target = ni.pressure_read, args = (device_name, channels, trigger_channel, sample_rate, measure_duration))
+        thread2 = threading.Thread(target = te.therm_read_interval, args = (measure_duration,))
+        
+        thread1.start()
+        thread2.start()
+        
+        thread1.join()
+        thread2.join()
+        
         print("Collection has ended:")
         print("="*50)
- 
-        avg_temp_col = (temp_before_collection+temp_after_collection)/2
- 
+  
         # update values ##########################
-        ni.update()
-        te.update(avg_temp_col)
+        ni.update(Pdx, Tdx)
+        te.update(Pdx, Tdx)
         ##########################################
         
         # Turning off the camera and the laser
@@ -291,21 +319,6 @@ print("The TE has been shutoff.")
 print("="*50)
 print("\n")
 
-# Reshaping the pressure dataset (rehapes to p_pts X t_points X time)
-        
-ni.ni_vars.all_pressure_weightedAvg_kpa = np.reshape(ni.ni_vars.all_pressure_weightedAvg_kpa, [len(press_set_pts),len(temp_set_pts)])
-ni.ni_vars.all_pressure_weighted_uncert_kpa = np.reshape(ni.ni_vars.all_pressure_weighted_uncert_kpa, [len(press_set_pts),len(temp_set_pts)])
-ni.ni_vars.all_times_omega = np.reshape( ni.ni_vars.all_times_omega, [len(press_set_pts),len(temp_set_pts),sample_rate*measure_duration])
-ni.ni_vars.all_pressure_omega = np.reshape( ni.ni_vars.all_pressure_omega, [len(press_set_pts),len(temp_set_pts),sample_rate*measure_duration])
-ni.ni_vars.all_pressure_mks = np.reshape( ni.ni_vars.all_pressure_mks, [len(press_set_pts),len(temp_set_pts),sample_rate*measure_duration])
-
-
-# Reshaping the te dataset (rehapes to p_pts X t_points X time)
-
-te.te_vars.all_avg_temp = np.reshape(te.te_vars.all_avg_temp, [len(press_set_pts),len(temp_set_pts)])
-te.te_vars.all_temps_te = np.reshape(te.te_vars.all_temps_te, [len(press_set_pts),len(temp_set_pts), int(measure_duration/0.2)])
-te.te_vars.all_times_te = np.reshape(te.te_vars.all_times_te, [len(press_set_pts),len(temp_set_pts), int(measure_duration/0.2)])
-
 # Saving the various arrays from the data collection as .mat files       
 savemat(os.path.join(savepath, "te.mat"), {
                                             "times_te": te.te_vars.all_times_te, 
@@ -315,8 +328,8 @@ savemat(os.path.join(savepath, "te.mat"), {
                                             })
 
 savemat(os.path.join(savepath, "pressure.mat"), {
-                                              "all_pressure_kpa": ni.ni_vars.all_pressure_weightedAvg_kpa,
-                                              "all_pressure_uncert": ni.ni_vars.all_pressure_weighted_uncert_kpa,
+                                              "all_pressure_kpa": ni.ni_vars.all_pressure_combined_kpa,
+                                              "all_pressure_uncert": ni.ni_vars.all_pressure_combined_sigma_kpa,
                                               "omega_pressure": ni.ni_vars.all_pressure_omega, 
                                               "mks_pressure": ni.ni_vars.all_pressure_mks,
                                               "time_p": ni.ni_vars.all_times_omega,

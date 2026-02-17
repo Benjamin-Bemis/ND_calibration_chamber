@@ -30,17 +30,26 @@ class te_vars:
         self.comport = None
         
         
-def initialize():
-    te_vars.all_times_te = np.array([])
-    te_vars.all_temps_te = np.array([])
-    te_vars.all_avg_temp = np.array([])
+def initialize(pdx, Tdx):
+    
+    tdx = 10 # this is hard coded from the therm_read_interval function in this same script
+    
+    size_3D = (pdx, Tdx, tdx)
+    size_2D = (pdx, Tdx)
+    
+    
+    te_vars.all_times_te = np.zeros(size_3D, dtype=float)
+    te_vars.all_temps_te = np.zeros(size_3D, dtype=float)
+    te_vars.all_avg_temp = np.zeros(size_2D, dtype=float)
+    
     te_vars.comport = get_device()
     
-def update(avg_temp_col):
-    te_vars.all_avg_temp  = np.concatenate([te_vars.all_avg_temp, np.array([avg_temp_col])], axis=0)
-        
-    te_vars.all_times_te = np.concatenate([te_vars.all_times_te, np.array([te_vars.times])], axis=0)
-    te_vars.all_temps_te = np.concatenate([te_vars.all_temps_te, np.array([te_vars.temps])], axis=0)
+def update(Pdx, Tdx):        
+    te_vars.all_times_te[Pdx, Tdx, :] = np.array(te_vars.times)
+    te_vars.all_temps_te[Pdx, Tdx, :] =  np.array(te_vars.temps)
+    
+    te_vars.all_avg_temp[Pdx, Tdx] =  np.mean(te_vars.temps)
+
         
 def get_device(): 
     """
@@ -166,6 +175,15 @@ def therm_read():
     
     return te_vars.temp
 
+def therm_read_interval(measure_duration):
+    te_vars.times = np.arange(0, 2, 0.2)
+    te_vars.temps = []
+    
+    for i in te_vars.times:
+        therm_read()
+        te_vars.temps.append(te_vars.temp)
+        time.sleep(0.2)
+
 
 def set_temp(temp_set_point):
     # temp_set_point must be in C
@@ -276,7 +294,7 @@ def set_output_ss_monitor(setpoint,interval,ss_length):
     print("\n")
     print("="*50)
     print("\n")
-    print(f"Steady State has been reached: [avg]")    
+    print(f"Steady State has been reached: {avg}")    
     print("="*50)
     print("\n")
     te_vars.times = np.linspace(counter - length,counter,num=length)       

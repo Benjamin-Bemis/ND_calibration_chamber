@@ -58,7 +58,7 @@ class ni_vars:
         
         self.device_name = local_sys()
         
-def initialize():
+def initialize(pdx, Tdx, tdx):
     """
     This function is used to initilize the class variables for data storage. 
     It can also be used to clear existing data stored in the defined variables.
@@ -72,38 +72,49 @@ def initialize():
     None.
 
     """    
+    
+    size_3D = (pdx, Tdx, tdx)
+    size_2D = (pdx, Tdx)
+    
 
-    ni_vars.all_times_omega = np.array([])
-    ni_vars.all_pressure_omega = np.array([])
-    ni_vars.all_pressure_mean_omega = np.array([])
-    ni_vars.all_voltage_omega = np.array([])
-    ni_vars.all_voltage_omega_mean = np.array([])
+    ni_vars.all_times_omega = np.zeros(size_3D, dtype=float)
+    ni_vars.all_times_mks = np.zeros(size_3D, dtype=float)
     
-    ni_vars.all_times_mks = np.array([])
-    ni_vars.all_pressure_mks = np.array([])
-    ni_vars.all_pressure_mean_mks = np.array([])
-    ni_vars.all_voltage_mks = np.array([])
-    ni_vars.all_voltage_mks_mean = np.array([])
+    ni_vars.all_pressure_omega = np.zeros(size_3D, dtype=float)
+    ni_vars.all_pressure_mean_omega =np.zeros(size_2D, dtype=float)
     
-    ni_vars.all_pressure_combined_kpa = np.array([])
-    ni_vars.all_pressure_combined_sigma_kpa = np.array([])
     
-def update():
-    ni_vars.all_times_omega = np.concatenate([ni_vars.all_times_omega, ni_vars.time_vector], axis=0)
-    ni_vars.all_pressure_omega = np.concatenate([ni_vars.all_pressure_omega, ni_vars.pressure_kpa], axis=0)
-    ni_vars.all_pressure_mean_omega = np.concatenate([ni_vars.all_pressure_mean_omega, np.array([ni_vars.pressure_kpa_mean])], axis=0)
-    ni_vars.all_voltage_omega = np.concatenate([ni_vars.all_voltage_omega, ni_vars.raw_voltage], axis=0)
+    ni_vars.all_voltage_omega = np.zeros(size_3D, dtype=float)
+    ni_vars.all_voltage_omega_mean = np.zeros(size_2D, dtype=float)
     
-    ni_vars.all_times_mks = np.concatenate([ni_vars.all_times_mks, ni_vars.mks_time_vector], axis=0)
-    ni_vars.all_pressure_mks = np.concatenate([ni_vars.all_pressure_mks, ni_vars.mks_pressure_kpa], axis=0)
-    ni_vars.all_pressure_mean_mks = np.concatenate([ni_vars.all_pressure_mean_mks, np.array([ni_vars.mks_pressure_kpa_mean])], axis=0)
-    ni_vars.all_voltage_mks = np.concatenate([ni_vars.all_voltage_mks, ni_vars.mks_raw_voltage], axis=0)
+    ni_vars.all_pressure_mks = np.zeros(size_3D, dtype=float)
+    ni_vars.all_pressure_mean_mks = np.zeros(size_2D, dtype=float)
     
-    ni_vars.all_voltage_omega_mean = np.concatenate([ni_vars.all_voltage_omega_mean, np.array([np.mean(ni_vars.raw_voltage)])], axis=0)
-    ni_vars.all_voltage_mks_mean = np.concatenate([ni_vars.all_voltage_mks_mean, np.array([np.mean(ni_vars.mks_raw_voltage)])], axis=0)
+    ni_vars.all_voltage_mks = np.zeros(size_3D, dtype=float)
+    ni_vars.all_voltage_mks_mean = np.zeros(size_2D, dtype=float)
     
-    ni_vars.all_pressure_weightedAvg_kpa = np.concatenate([ni_vars.all_pressure_combined_kpa, np.array([ni_vars.pressure_combined_kpa])], axis=0)
-    ni_vars.all_pressure_weighted_uncert_kpa = np.concatenate([ni_vars.all_pressure_combined_sigma_kpa, np.array([ni_vars.pressure_combined_sigma_kpa])], axis=0)
+    ni_vars.all_pressure_combined_kpa = np.zeros(size_2D, dtype=float)
+    ni_vars.all_pressure_combined_sigma_kpa = np.zeros(size_2D, dtype=float)
+    
+def update(Pidx, Tidx):
+    ni_vars.all_times_omega[Pidx, Tidx, :] =  np.array(ni_vars.time_vector)
+    ni_vars.all_times_mks[Pidx, Tidx, :] =  np.array(ni_vars.mks_time_vector)
+    
+    ni_vars.all_pressure_omega[Pidx, Tidx, :] = np.array(ni_vars.pressure_kpa)
+    ni_vars.all_voltage_omega[Pidx, Tidx, :] =  np.array(ni_vars.raw_voltage)
+    
+    
+    ni_vars.all_pressure_mks[Pidx, Tidx, :] = np.array(ni_vars.mks_pressure_kpa)
+    ni_vars.all_voltage_mks[Pidx, Tidx, :] = np.array(ni_vars.mks_raw_voltage)
+    
+    ni_vars.all_pressure_mean_mks[Pidx, Tidx] = ni_vars.mks_pressure_kpa_mean
+    ni_vars.all_pressure_mean_omega[Pidx, Tidx] = ni_vars.pressure_kpa_mean
+    
+    ni_vars.all_voltage_omega_mean[Pidx, Tidx] = np.mean(ni_vars.raw_voltage)
+    ni_vars.all_voltage_mks_mean[Pidx, Tidx] = np.mean(ni_vars.mks_raw_voltage)
+    
+    ni_vars.all_pressure_combined_kpa[Pidx, Tidx] = np.array(ni_vars.pressure_combined_kpa)
+    ni_vars.all_pressure_combined_sigma_kpa[Pidx, Tidx] = np.array(ni_vars.pressure_combined_sigma_kpa)
 
         
 # DAQ Functions 
@@ -336,9 +347,6 @@ def pressure_read(device_name, channels, trigger_channel, sample_rate, measure_d
         combined_pressure = np.append(combined_pressure, combined_pressure_new)
         sigma = np.append(sigma, sigma_new)
 
-        
-    
-    
     
     # Writing Omega sensor to class
     ni_vars.time_vector = time_vector
