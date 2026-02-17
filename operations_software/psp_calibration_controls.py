@@ -290,26 +290,39 @@ te.output_enable("off")                                                        #
 print("The TE has been shutoff.")
 print("="*50)
 print("\n")
+
+# Reshaping the pressure dataset (rehapes to p_pts X t_points X time)
         
+ni.ni_vars.all_pressure_weightedAvg_kpa = np.reshape(ni.ni_vars.all_pressure_weightedAvg_kpa, [len(press_set_pts),len(temp_set_pts)])
+ni.ni_vars.all_pressure_weighted_uncert_kpa = np.reshape(ni.ni_vars.all_pressure_weighted_uncert_kpa, [len(press_set_pts),len(temp_set_pts)])
+ni.ni_vars.all_times_omega = np.reshape( ni.ni_vars.all_times_omega, [len(press_set_pts),len(temp_set_pts),sample_rate*measure_duration])
+ni.ni_vars.all_pressure_omega = np.reshape( ni.ni_vars.all_pressure_omega, [len(press_set_pts),len(temp_set_pts),sample_rate*measure_duration])
+ni.ni_vars.all_pressure_mks = np.reshape( ni.ni_vars.all_pressure_mks, [len(press_set_pts),len(temp_set_pts),sample_rate*measure_duration])
+
+
+# Reshaping the te dataset (rehapes to p_pts X t_points X time)
+
+te.te_vars.all_avg_temp = np.reshape(te.te_vars.all_avg_temp, [len(press_set_pts),len(temp_set_pts)])
+te.te_vars.all_temps_te = np.reshape(te.te_vars.all_temps_te, [len(press_set_pts),len(temp_set_pts), int(measure_duration/0.2)])
+te.te_vars.all_times_te = np.reshape(te.te_vars.all_times_te, [len(press_set_pts),len(temp_set_pts), int(measure_duration/0.2)])
+
 # Saving the various arrays from the data collection as .mat files       
 savemat(os.path.join(savepath, "te.mat"), {
                                             "times_te": te.te_vars.all_times_te, 
                                             "temps_te": te.te_vars.all_temps_te,
                                             "te_average_temps": te.te_vars.all_avg_temp,
-                                            "t_setpoints": te.te_vars.temp_set_pts})
+                                            "t_setpoints": temp_set_pts,
+                                            })
 
 savemat(os.path.join(savepath, "pressure.mat"), {
                                               "all_pressure_kpa": ni.ni_vars.all_pressure_weightedAvg_kpa,
                                               "all_pressure_uncert": ni.ni_vars.all_pressure_weighted_uncert_kpa,
-                                              "time": ni.ni_vars.all_times_omega,
+                                              "omega_pressure": ni.ni_vars.all_pressure_omega, 
+                                              "mks_pressure": ni.ni_vars.all_pressure_mks,
+                                              "time_p": ni.ni_vars.all_times_omega,
+                                              "p_setpoints": press_set_pts,
                                               })
 print("="*50)
 print(f"Data has been saved to this directory: {savepath}")
 print("="*50)
 print("\n")
-
-
-# main()
-
-
-

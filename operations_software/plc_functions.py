@@ -161,7 +161,7 @@ def ttl_pulse(register,status):
     This function turns on and off a 5V signal. This can be used to make a square wave for triggering external devices.
     
     Author: Benjamin Bemis 
-    Updated: 1/28/2026
+    Updated: 2/17/2026
     
     Parameters
     ----------
@@ -189,6 +189,70 @@ def ttl_pulse(register,status):
             case 'on':
                 # Define the data to write (for example, a single integer value)
                 data_to_write = 100; # This should write 5V
+            
+                # Write the data to the specified Modbus address
+                is_success = c.write_single_register(modbus_address, data_to_write)
+            case 'off':
+                # Define the data to write (for example, a single integer value)
+                data_to_write = 0; # This should write 0V
+            
+                # Write the data to the specified Modbus address
+                is_success = c.write_single_register(modbus_address, data_to_write)
+            case _:
+                return "You have asked the plc to do something other than on or off."
+        
+    
+        if is_success:
+            print(f"Successfully wrote to the PLC: Modbus address {modbus_address}")
+            print("="*50)
+            print("\n")
+            
+        else:
+            print(f"Failed to write TTL Pulse to Modbus address {modbus_address}")
+            print("="*50)
+            print("\n")
+    
+        # Close the Modbus connection
+        c.close()
+    else:
+        print("Unable to open Modbus connection")
+        print("="*50)
+        print("\n")
+        
+def laser_pulse(register,status):   
+    
+    """
+    This function turns on and off a 1V signal. This can be used to make a square wave for triggering laser driver (nescel).
+    
+    Author: Benjamin Bemis 
+    Updated: 2/17/2026
+    
+    Parameters
+    ----------
+    register : This is the PLC register number minus 1. Note that Modbus addresses are 0-based, so 400002 becomes 1 (Expected values should be 1 or 2).
+    status : 'on' or 'off'. This give either a 0V or 1V.
+
+    Returns
+    -------
+    No returns. However, there are updates written to the console.
+
+
+    """
+    # Setup of the debugger logging
+    # logging.basicConfig()
+    # logging.getLogger('pyModbusTCP.client').setLevel(logging.DEBUG)
+    
+    
+    # Base function:    
+    c = ModbusClient(host="169.254.23.198", port=502, unit_id=1, auto_open=True)
+    
+    if c.open(): # this function needs to use the open() command not is_open. They return conflicting booleen logic
+        # Define the Modbus address to write to (400001)
+        modbus_address = register  # Note that Modbus addresses are 0-based, so 400002 becomes 1
+        match status:
+            case 'on':
+                # Define the data to write (for example, a single integer value)
+                data_to_write = 20; # This should write 1V
             
                 # Write the data to the specified Modbus address
                 is_success = c.write_single_register(modbus_address, data_to_write)
